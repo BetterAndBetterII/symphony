@@ -68,7 +68,7 @@ defmodule SymphonyElixir.Codex.DynamicTool do
   defp normalize_github_graphql_arguments(arguments) when is_binary(arguments) do
     case String.trim(arguments) do
       "" -> {:error, :missing_query}
-      query -> {:ok, query, %{}}
+      query -> normalize_single_operation_query(query, %{})
     end
   end
 
@@ -77,7 +77,7 @@ defmodule SymphonyElixir.Codex.DynamicTool do
       {:ok, query} ->
         case normalize_variables(arguments) do
           {:ok, variables} ->
-            {:ok, query, variables}
+            normalize_single_operation_query(query, variables)
 
           {:error, reason} ->
             {:error, reason}
@@ -108,6 +108,21 @@ defmodule SymphonyElixir.Codex.DynamicTool do
       variables when is_map(variables) -> {:ok, variables}
       _ -> {:error, :invalid_variables}
     end
+  end
+
+  defp normalize_single_operation_query(query, variables)
+       when is_binary(query) and is_map(variables) do
+    if multiple_graphql_operations?(query) do
+      {:error, :multiple_operations_not_supported}
+    else
+      {:ok, query, variables}
+    end
+  end
+
+  defp multiple_graphql_operations?(query) when is_binary(query) do
+    Regex.scan(~r/^\s*(query|mutation|subscription)\b/m, query)
+    |> length()
+    |> Kernel.>(1)
   end
 
   defp graphql_response(response) do
@@ -167,6 +182,14 @@ defmodule SymphonyElixir.Codex.DynamicTool do
     %{
       "error" => %{
         "message" => "`github_graphql.variables` must be a JSON object when provided."
+      }
+    }
+  end
+
+  defp tool_error_payload(:multiple_operations_not_supported) do
+    %{
+      "error" => %{
+        "message" => "`github_graphql` only supports a single GraphQL operation per tool call (multiple operations require `operationName`, which is intentionally out of scope)."
       }
     }
   end

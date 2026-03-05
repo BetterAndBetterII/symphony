@@ -1087,6 +1087,7 @@ Optional client-side tool extension:
 - `variables` is optional and, when present, must be a JSON object.
 - Implementations may additionally accept a raw GraphQL query string as shorthand input.
 - Execute one GraphQL operation per tool call.
+- Reject documents with multiple operations (since `operationName` selection is intentionally out of scope).
 - `operationName` selection is intentionally out of scope for this extension.
 - Reuse the configured GitHub endpoint and auth from the active Symphony workflow/runtime config; do
   not require the coding agent to read raw tokens from disk.

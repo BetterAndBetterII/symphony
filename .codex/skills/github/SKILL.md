@@ -29,6 +29,7 @@ Tool input:
 Tool behavior:
 
 - Send one GraphQL operation per tool call.
+- Multi-operation documents are rejected (operationName selection is intentionally out of scope).
 - Treat a top-level `errors` array as a failed GraphQL operation even if the
   tool call itself completed.
 - Keep queries/mutations narrowly scoped; ask only for the fields you need.
