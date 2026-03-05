@@ -37,8 +37,10 @@ Symphony stops the active agent for that issue and cleans up matching workspaces
    - The `github` skill expects Symphony's `github_graphql` app-server tool for raw GitHub GraphQL
      operations such as comment editing or project field updates.
 5. Customize the copied `WORKFLOW.md` file for your project.
-   - Configure the GitHub Project owner + number, plus the Project field used as "status" (default: `Status`).
-   - Ensure the Project field values match your expected states (for example: `Todo`, `In Progress`, `Done`).
+   - Configure the GitHub Project owner + number.
+   - Configure the Project field used as "status" (default: `Status`).
+   - Ensure the Project field values match your expected states (for example: `Todo`, `In Progress`,
+     `In Review`, `Merging`, `Done`, `Rework`).
 6. Follow the instructions below to install the required runtime dependencies and start the service.
 
 ## Prerequisites

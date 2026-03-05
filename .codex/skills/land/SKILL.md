@@ -143,7 +143,7 @@ Exit codes:
   start with `## Codex Review — <persona>` and include the reviewer’s
   methodology + guardrails used. Treat these as feedback that must be
   acknowledged before merge.
-- Human review comments are blocking and must be addressed (responded to and
+- In Review comments are blocking and must be addressed (responded to and
   resolved) before requesting a new review or merging.
 - If multiple reviewers comment in the same thread, respond to each comment
   (batching is fine) before closing the thread.

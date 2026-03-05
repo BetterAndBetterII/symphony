@@ -29,7 +29,7 @@ Important boundary:
 - Symphony is a scheduler/runner and tracker reader.
 - Ticket writes (state transitions, comments, PR links) are typically performed by the coding agent
   using tools available in the workflow/runtime environment.
-- A successful run may end at a workflow-defined handoff state (for example `Human Review`), not
+- A successful run may end at a workflow-defined handoff state (for example `In Review`), not
   necessarily `Done`.
 
 ## 2. Goals and Non-Goals
@@ -1226,7 +1226,7 @@ Symphony does not require first-class tracker write APIs in the orchestrator.
   agent using tools defined by the workflow prompt.
 - The service remains a scheduler/runner and tracker reader.
 - Workflow-specific success often means "reached the next handoff state" (for example
-  `Human Review`) rather than tracker terminal state `Done`.
+  `In Review`) rather than tracker terminal state `Done`.
 - If the optional `github_graphql` client-side tool extension is implemented, it is still part of
   the agent toolchain rather than orchestrator business logic.
 
