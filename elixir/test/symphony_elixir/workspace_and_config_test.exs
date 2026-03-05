@@ -639,8 +639,18 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
 
   test "config reads defaults for optional settings" do
     previous_linear_api_key = System.get_env("LINEAR_API_KEY")
-    on_exit(fn -> restore_env("LINEAR_API_KEY", previous_linear_api_key) end)
+    previous_linear_project_slug = System.get_env("LINEAR_PROJECT_SLUG")
+    previous_linear_assignee = System.get_env("LINEAR_ASSIGNEE")
+
+    on_exit(fn ->
+      restore_env("LINEAR_API_KEY", previous_linear_api_key)
+      restore_env("LINEAR_PROJECT_SLUG", previous_linear_project_slug)
+      restore_env("LINEAR_ASSIGNEE", previous_linear_assignee)
+    end)
+
     System.delete_env("LINEAR_API_KEY")
+    System.delete_env("LINEAR_PROJECT_SLUG")
+    System.delete_env("LINEAR_ASSIGNEE")
 
     write_workflow_file!(Workflow.workflow_file_path(),
       workspace_root: nil,
