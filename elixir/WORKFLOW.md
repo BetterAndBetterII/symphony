@@ -1,7 +1,9 @@
 ---
 tracker:
-  kind: linear
-  project_slug: "$LINEAR_PROJECT_SLUG"
+  kind: github_project
+  project_owner: "BetterAndBetterII"
+  project_number: 1
+  project_field_status: "Status"
   active_states:
     - Todo
     - In Progress
@@ -40,7 +42,7 @@ codex:
 
 ---
 
-你正在处理一个 Linear 工单 `{{ issue.identifier }}`
+你正在处理一个由 GitHub Projects 跟踪的 GitHub 工单 `{{ issue.identifier }}`
 
 {% if attempt %}
 续跑上下文：
@@ -92,9 +94,9 @@ URL: {{ issue.url }}
 
 如果工单里已经有 `issue.branch_name` 但不符合该规范，仍以本规范分支推进，并在工作台评论里记录实际分支名与原因。
 
-## 前置条件：Linear MCP 或 `linear_graphql` 工具可用
+## 前置条件：GitHub 鉴权或 `github_graphql` 工具可用
 
-代理必须能够与 Linear 通信：要么通过已配置的 Linear MCP 服务器，要么通过注入的 `linear_graphql` 工具。如果两者都不存在，停止并要求用户配置 Linear。
+代理必须能够与 GitHub 通信：可以通过 PAT / `GITHUB_TOKEN` / `GH_TOKEN`，以及/或者通过注入的 `github_graphql` 工具。如果这些都不可用，停止并要求用户配置 GitHub 鉴权。
 
 ## 默认工作方式
 
@@ -103,18 +105,18 @@ URL: {{ issue.url }}
 - 在动手实现前，在计划与验证方案上多投入一些精力。
 - 先复现：在修改代码前，总是要确认当前行为/问题信号，保证修复目标明确。
 - 保持工单元数据是最新的（状态、检查清单、验收标准、链接）。
-- 将一条持久化的 Linear 评论作为进度的唯一事实来源。
+- 将一条持久化的 GitHub 工单评论作为进度的唯一事实来源。
 - 所有进度更新与交接说明都写到这一条工作台评论里；不要额外再发“完成/总结”评论。
 - 若工单正文里包含 `Validation`、`Test Plan` 或 `Testing` 段落，将其视为不可协商的验收输入：在工作台评论里镜像出来，并在认为工作完成前执行到位。
 - 执行过程中如果发现有意义的范围外改进点：
-  不要扩大当前范围；改为新建一个 Linear 工单。该跟进工单必须包含清晰的标题、描述、验收标准；放入 `Backlog`；分配到与当前工单相同的项目；与当前工单建立 `related` 关联；如果跟进依赖当前工单，则使用 `blockedBy`。
+  不要扩大当前范围；改为新建一个 GitHub 工单。该跟进工单必须包含清晰的标题、描述、验收标准；放入 `Backlog`；分配到与当前工单相同的项目；与当前工单建立 `related` 关联；如果跟进依赖当前工单，则使用 `blockedBy`。
 - 只有达到对应状态的质量门槛时才移动状态。
 - 端到端自主执行，除非被缺失的必要需求、密钥或权限阻塞。
 - 只有在用尽文档中列出的备选策略（fallback）之后，才可以启用阻塞访问（blocked-access）的逃生阀（仅限真正的外部阻塞：缺少必需工具/鉴权）。
 
 ## 相关技能
 
-- `linear`: 与 Linear 交互。
+- `github`: 与 GitHub 交互。
 - `commit`: 在实现过程中产出干净、逻辑清晰的提交。
 - `push`: 保持远端分支更新并发布改动。
 - `pull`: 在交接前将分支与最新 `origin/main` 同步。
@@ -170,7 +172,7 @@ URL: {{ issue.url }}
 5.  确保工作台评论顶部包含一个紧凑的环境戳（放在代码围栏（code fence）的单行里）：
     - 格式：`<host>:<abs-workdir>@<short-sha>`
     - 示例：`devbox-01:/home/dev-user/code/symphony-workspaces/MT-32@7bdde33bc`
-    - 不要包含 Linear 字段里已经能推断出来的元信息（`issue ID`、`status`、`branch`、`PR link`）。
+    - 不要包含工单字段里已经能推断出来的元信息（`issue ID`、`status`、`branch`、`PR link`）。
 6.  在同一条评论中，以检查清单（checklist）形式写清楚验收标准和待办（TODO）：
     - 如果改动是用户可见的，加入一个 UI 走查验收项，描述端到端用户路径与预期结果。
     - 如果改动影响 app 文件或行为，在 `Acceptance Criteria` 中加入明确的 app 流程检查项（例如：启动路径、交互路径变化、预期结果）。

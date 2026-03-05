@@ -4,7 +4,8 @@ defmodule SymphonyElixir.Linear.Client do
   """
 
   require Logger
-  alias SymphonyElixir.{Config, Linear.Issue}
+  alias SymphonyElixir.Config
+  alias SymphonyElixir.Tracker.Issue
 
   @issue_page_size 50
   @max_error_body_log_bytes 1_000
