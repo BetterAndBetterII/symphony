@@ -1,6 +1,114 @@
 defmodule SymphonyElixir.AppServerTest do
   use SymphonyElixir.TestSupport
 
+  test "app server sanitizes invalid UTF-8 in outbound JSON-RPC payloads" do
+    test_root =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-elixir-app-server-invalid-utf8-#{System.unique_integer([:positive])}"
+      )
+
+    try do
+      workspace_root = Path.join(test_root, "workspaces")
+      workspace = Path.join(workspace_root, "MT-UTF8")
+      codex_binary = Path.join(test_root, "fake-codex")
+      trace_file = Path.join(test_root, "codex-invalid-utf8.trace")
+      previous_trace = System.get_env("SYMP_TEST_CODEx_TRACE")
+
+      on_exit(fn ->
+        if is_binary(previous_trace) do
+          System.put_env("SYMP_TEST_CODEx_TRACE", previous_trace)
+        else
+          System.delete_env("SYMP_TEST_CODEx_TRACE")
+        end
+      end)
+
+      System.put_env("SYMP_TEST_CODEx_TRACE", trace_file)
+      File.mkdir_p!(workspace)
+
+      File.write!(codex_binary, """
+      #!/bin/sh
+      trace_file="${SYMP_TEST_CODEx_TRACE:-/tmp/codex-invalid-utf8.trace}"
+      count=0
+      while IFS= read -r line; do
+        count=$((count + 1))
+        printf 'JSON:%s\\n' \"$line\" >> \"$trace_file\"
+
+        case \"$count\" in
+          1)
+            printf '%s\\n' '{\"id\":1,\"result\":{}}'
+            ;;
+          2)
+            ;;
+          3)
+            printf '%s\\n' '{\"id\":2,\"result\":{\"thread\":{\"id\":\"thread-utf8\"}}}'
+            ;;
+          4)
+            printf '%s\\n' '{\"id\":3,\"result\":{\"turn\":{\"id\":\"turn-utf8\"}}}'
+            printf '%s\\n' '{\"method\":\"turn/completed\"}'
+            exit 0
+            ;;
+          *)
+            exit 0
+            ;;
+        esac
+      done
+      """)
+
+      File.chmod!(codex_binary, 0o755)
+
+      write_workflow_file!(Workflow.workflow_file_path(),
+        workspace_root: workspace_root,
+        codex_command: "#{codex_binary} app-server",
+        codex_approval_policy: "never"
+      )
+
+      issue = %Issue{
+        id: "issue-invalid-utf8",
+        identifier: "MT-UTF8",
+        title: "Invalid UTF-8 prompt",
+        description: "Prompt should be sanitized before JSON encode",
+        state: "In Progress",
+        url: "https://example.org/issues/MT-UTF8",
+        labels: ["backend"]
+      }
+
+      invalid_prompt = "hello-" <> <<0xE5>>
+
+      assert {:ok, _result} = AppServer.run(workspace, invalid_prompt, issue)
+
+      trace = File.read!(trace_file)
+
+      turn_start_payload =
+        trace
+        |> String.split("\n", trim: true)
+        |> Enum.find_value(fn line ->
+          if String.starts_with?(line, "JSON:") do
+            payload =
+              line
+              |> String.trim_leading("JSON:")
+              |> Jason.decode!()
+
+            if payload["id"] == 3 do
+              payload
+            else
+              nil
+            end
+          else
+            nil
+          end
+        end)
+
+      assert is_map(turn_start_payload)
+      text = get_in(turn_start_payload, ["params", "input", Access.at(0), "text"])
+      assert is_binary(text)
+      assert String.starts_with?(text, "hello-")
+      assert String.contains?(text, "�")
+    after
+      File.rm_rf(test_root)
+    end
+  end
+
   test "app server rejects the workspace root and paths outside workspace root" do
     test_root =
       Path.join(

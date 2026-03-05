@@ -944,9 +944,56 @@ defmodule SymphonyElixir.Codex.AppServer do
   defp tool_call_arguments(_params), do: %{}
 
   defp send_message(port, message) do
-    line = Jason.encode!(message) <> "\n"
+    line =
+      try do
+        Jason.encode!(message)
+      rescue
+        error in Jason.EncodeError ->
+          if invalid_utf8_encode_error?(error) do
+            Logger.warning(
+              "Codex JSON-RPC payload contained invalid UTF-8; sanitizing and retrying encode."
+            )
+
+            message
+            |> sanitize_json_strings()
+            |> Jason.encode!()
+          else
+            reraise error, __STACKTRACE__
+          end
+      end <> "\n"
+
     Port.command(port, line)
   end
+
+  defp invalid_utf8_encode_error?(%Jason.EncodeError{message: message})
+       when is_binary(message) do
+    String.contains?(message, "invalid byte")
+  end
+
+  defp invalid_utf8_encode_error?(_error), do: false
+
+  defp sanitize_json_strings(value) when is_binary(value) do
+    if String.valid?(value), do: value, else: String.replace_invalid(value)
+  end
+
+  defp sanitize_json_strings(value) when is_list(value) do
+    Enum.map(value, &sanitize_json_strings/1)
+  end
+
+  defp sanitize_json_strings(value) when is_map(value) do
+    Map.new(value, fn {key, inner} ->
+      sanitized_key =
+        if is_binary(key) and not String.valid?(key) do
+          String.replace_invalid(key)
+        else
+          key
+        end
+
+      {sanitized_key, sanitize_json_strings(inner)}
+    end)
+  end
+
+  defp sanitize_json_strings(value), do: value
 
   defp needs_input?(method, payload)
        when is_binary(method) and is_map(payload) do
