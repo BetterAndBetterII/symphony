@@ -179,23 +179,23 @@ defmodule SymphonyElixir.Orchestrator do
       choose_issues(issues, state)
     else
       {:error, :missing_linear_api_token} ->
-        Logger.error("Linear API token missing in WORKFLOW.md")
+        Logger.error("Linear API token missing in WORKFLOW.md or env")
         state
 
       {:error, :missing_linear_project_slug} ->
-        Logger.error("Linear project slug missing in WORKFLOW.md")
+        Logger.error("Linear project slug missing in WORKFLOW.md or env")
         state
 
       {:error, :missing_github_api_token} ->
-        Logger.error("GitHub API token missing in WORKFLOW.md")
+        Logger.error("GitHub API token missing in WORKFLOW.md or env")
         state
 
       {:error, :missing_github_project_owner} ->
-        Logger.error("GitHub Project owner missing in WORKFLOW.md")
+        Logger.error("GitHub Project owner missing in WORKFLOW.md or env")
         state
 
       {:error, :missing_github_project_number} ->
-        Logger.error("GitHub Project number missing in WORKFLOW.md")
+        Logger.error("GitHub Project number missing in WORKFLOW.md or env")
         state
 
       {:error, :missing_tracker_kind} ->

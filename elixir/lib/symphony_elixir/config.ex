@@ -246,12 +246,24 @@ defmodule SymphonyElixir.Config do
 
   @spec github_project_owner() :: String.t() | nil
   def github_project_owner do
-    get_in(validated_workflow_options(), [:tracker, :project_owner])
+    validated_workflow_options()
+    |> get_in([:tracker, :project_owner])
+    |> resolve_env_value(System.get_env("GITHUB_PROJECT_OWNER"))
+    |> normalize_secret_value()
   end
 
   @spec github_project_number() :: pos_integer() | nil
   def github_project_number do
-    get_in(validated_workflow_options(), [:tracker, :project_number])
+    case get_in(validated_workflow_options(), [:tracker, :project_number]) do
+      number when is_integer(number) ->
+        number
+
+      _ ->
+        case parse_positive_integer(System.get_env("GITHUB_PROJECT_NUMBER")) do
+          {:ok, parsed} -> parsed
+          :error -> nil
+        end
+    end
   end
 
   @spec github_project_status_field() :: String.t()
@@ -786,13 +798,43 @@ defmodule SymphonyElixir.Config do
   defp parse_integer(value) when is_integer(value), do: {:ok, value}
 
   defp parse_integer(value) when is_binary(value) do
-    case Integer.parse(String.trim(value)) do
-      {parsed, _} -> {:ok, parsed}
-      :error -> :error
-    end
+    value
+    |> String.trim()
+    |> parse_integer_string(0)
   end
 
   defp parse_integer(_value), do: :error
+
+  defp parse_integer_string(value, depth) when is_binary(value) and depth < 5 do
+    if value == "" do
+      :error
+    else
+      case env_reference_name(value) do
+        {:ok, env_name} ->
+          case resolve_env_token(env_name) do
+            :missing ->
+              :error
+
+            env_value when is_binary(env_value) ->
+              env_trimmed = String.trim(env_value)
+
+              cond do
+                env_trimmed == "" -> :error
+                env_trimmed == value -> :error
+                true -> parse_integer_string(env_trimmed, depth + 1)
+              end
+          end
+
+        :error ->
+          case Integer.parse(value) do
+            {parsed, _} -> {:ok, parsed}
+            :error -> :error
+          end
+      end
+    end
+  end
+
+  defp parse_integer_string(_value, _depth), do: :error
 
   defp parse_positive_integer(value) do
     case parse_integer(value) do
