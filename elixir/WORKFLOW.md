@@ -1,7 +1,7 @@
 ---
 tracker:
   kind: linear
-  project_slug: "symphony-0c79b11b75ea"
+  project_slug: "$LINEAR_PROJECT_SLUG"
   active_states:
     - Todo
     - In Progress
@@ -16,12 +16,12 @@ tracker:
 polling:
   interval_ms: 5000
 workspace:
-  root: ~/code/symphony-workspaces
+  root: "$SYMPHONY_WORKSPACE_ROOT"
 hooks:
   after_create: |
     git clone --depth 1 https://github.com/openai/symphony .
     if command -v mise >/dev/null 2>&1; then
-      cd elixir && mise trust && mise exec -- mix deps.get
+      cd elixir && mise trust -y && mise exec -- mix deps.get
     fi
   before_remove: |
     cd elixir && mise exec -- mix workspace.before_remove
