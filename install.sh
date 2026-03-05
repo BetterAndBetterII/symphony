@@ -119,7 +119,7 @@ fi
 
 # Default: run the service in the foreground using ./WORKFLOW.md from the current directory.
 if [[ $# -eq 0 ]]; then
-  exec "$REL_BIN" foreground
+  exec "$REL_BIN" start
 fi
 
 # Advanced usage: allow users to invoke release commands directly.

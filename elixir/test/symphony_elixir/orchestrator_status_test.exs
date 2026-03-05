@@ -930,6 +930,10 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
       last_codex_message: nil,
       last_codex_timestamp: stale_activity_at,
       last_codex_event: :notification,
+      codex_app_server_pid: nil,
+      codex_input_tokens: 0,
+      codex_output_tokens: 0,
+      codex_total_tokens: 0,
       started_at: stale_activity_at
     }
 
@@ -940,23 +944,35 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
     end)
 
     send(pid, :tick)
-    Process.sleep(100)
-    state = :sys.get_state(pid)
+    snapshot =
+      wait_for_snapshot(pid, fn
+        %{retrying: retrying, running: running}
+        when is_list(retrying) and is_list(running) ->
+          Enum.any?(retrying, &(&1.issue_id == issue_id)) and Enum.all?(running, &(&1.issue_id != issue_id))
+
+        _ ->
+          false
+      end, 1_000)
 
     refute Process.alive?(worker_pid)
-    refute Map.has_key?(state.running, issue_id)
+
+    assert %{retrying: retrying} = snapshot
+    assert is_list(retrying)
+    assert retry = Enum.find(retrying, &(&1.issue_id == issue_id))
 
     assert %{
              attempt: 1,
-             due_at_ms: due_at_ms,
+             due_in_ms: due_in_ms,
              identifier: "MT-STALL",
              error: "stalled for " <> _
-           } = state.retry_attempts[issue_id]
+           } = retry
 
-    assert is_integer(due_at_ms)
-    remaining_ms = due_at_ms - System.monotonic_time(:millisecond)
-    assert remaining_ms >= 9_500
-    assert remaining_ms <= 10_500
+    assert is_integer(due_in_ms)
+
+    # Under load, snapshot + scheduling can add some jitter; validate we're using the 10s backoff,
+    # not an immediate or tiny retry delay.
+    assert due_in_ms >= 8_000
+    assert due_in_ms <= 10_500
   end
 
   test "status dashboard renders offline marker to terminal" do

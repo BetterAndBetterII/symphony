@@ -642,6 +642,10 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
     on_exit(fn -> restore_env("LINEAR_API_KEY", previous_linear_api_key) end)
     System.delete_env("LINEAR_API_KEY")
 
+    previous_linear_project_slug = System.get_env("LINEAR_PROJECT_SLUG")
+    on_exit(fn -> restore_env("LINEAR_PROJECT_SLUG", previous_linear_project_slug) end)
+    System.delete_env("LINEAR_PROJECT_SLUG")
+
     write_workflow_file!(Workflow.workflow_file_path(),
       workspace_root: nil,
       max_concurrent_agents: nil,

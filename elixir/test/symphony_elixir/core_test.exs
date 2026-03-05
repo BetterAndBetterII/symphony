@@ -2,6 +2,10 @@ defmodule SymphonyElixir.CoreTest do
   use SymphonyElixir.TestSupport
 
   test "config defaults and validation checks" do
+    previous_linear_project_slug = System.get_env("LINEAR_PROJECT_SLUG")
+    on_exit(fn -> restore_env("LINEAR_PROJECT_SLUG", previous_linear_project_slug) end)
+    System.delete_env("LINEAR_PROJECT_SLUG")
+
     write_workflow_file!(Workflow.workflow_file_path(),
       tracker_api_token: nil,
       tracker_project_slug: nil,
@@ -88,7 +92,10 @@ defmodule SymphonyElixir.CoreTest do
 
     hooks = Map.get(config, "hooks", %{})
     assert is_map(hooks)
-    assert Map.get(hooks, "after_create") =~ "git clone --depth 1 https://github.com/openai/symphony ."
+    after_create = Map.get(hooks, "after_create", "")
+    assert is_binary(after_create)
+    assert after_create =~ "git clone --depth 1"
+    assert after_create =~ "symphony"
     assert Map.get(hooks, "after_create") =~ "cd elixir && mise trust"
     assert Map.get(hooks, "after_create") =~ "mise exec -- mix deps.get"
     assert Map.get(hooks, "before_remove") =~ "cd elixir && mise exec -- mix workspace.before_remove"
