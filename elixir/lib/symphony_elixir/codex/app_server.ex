@@ -950,9 +950,18 @@ defmodule SymphonyElixir.Codex.AppServer do
       rescue
         error in Jason.EncodeError ->
           if invalid_utf8_encode_error?(error) do
-            Logger.warning(
-              "Codex JSON-RPC payload contained invalid UTF-8; sanitizing and retrying encode."
-            )
+            Logger.warning(fn ->
+              report =
+                message
+                |> invalid_utf8_report()
+                |> Enum.take(8)
+
+              method = Map.get(message, "method") || Map.get(message, :method)
+              id = Map.get(message, "id") || Map.get(message, :id)
+
+              "Codex JSON-RPC payload contained invalid UTF-8; sanitizing and retrying encode." <>
+                " method=#{inspect(method)} id=#{inspect(id)} invalid=#{inspect(report, limit: 20, printable_limit: 2_000)}"
+            end)
 
             message
             |> sanitize_json_strings()
@@ -994,6 +1003,99 @@ defmodule SymphonyElixir.Codex.AppServer do
   end
 
   defp sanitize_json_strings(value), do: value
+
+  defp invalid_utf8_report(value) do
+    value
+    |> collect_invalid_utf8([], "$")
+    |> Enum.reverse()
+  end
+
+  defp collect_invalid_utf8(value, acc, path) when is_binary(value) do
+    if String.valid?(value) do
+      acc
+    else
+      {status, offset, rest_prefix_hex} = invalid_utf8_location(value)
+
+      snippet =
+        value
+        |> String.replace_invalid()
+        |> String.slice(0, 120)
+
+      [
+        %{
+          path: path,
+          status: status,
+          byte_offset: offset,
+          rest_prefix_hex: rest_prefix_hex,
+          sanitized_prefix: snippet
+        }
+        | acc
+      ]
+    end
+  end
+
+  defp collect_invalid_utf8(value, acc, path) when is_list(value) do
+    value
+    |> Enum.with_index()
+    |> Enum.reduce(acc, fn {inner, index}, inner_acc ->
+      collect_invalid_utf8(inner, inner_acc, "#{path}[#{index}]")
+    end)
+  end
+
+  defp collect_invalid_utf8(value, acc, path) when is_map(value) do
+    Enum.reduce(value, acc, fn {key, inner}, inner_acc ->
+      inner_acc =
+        if is_binary(key) and not String.valid?(key) do
+          {status, offset, rest_prefix_hex} = invalid_utf8_location(key)
+
+          sanitized_prefix =
+            key
+            |> String.replace_invalid()
+            |> String.slice(0, 120)
+
+          [
+            %{
+              path: "#{path}{key}",
+              status: status,
+              byte_offset: offset,
+              rest_prefix_hex: rest_prefix_hex,
+              sanitized_prefix: sanitized_prefix
+            }
+            | inner_acc
+          ]
+        else
+          inner_acc
+        end
+
+      segment =
+        cond do
+          is_atom(key) -> Atom.to_string(key)
+          is_binary(key) -> key
+          true -> inspect(key)
+        end
+
+      collect_invalid_utf8(inner, inner_acc, "#{path}.#{segment}")
+    end)
+  end
+
+  defp collect_invalid_utf8(_value, acc, _path), do: acc
+
+  defp invalid_utf8_location(value) when is_binary(value) do
+    case :unicode.characters_to_binary(value, :utf8, :utf8) do
+      valid when is_binary(valid) ->
+        {:valid, byte_size(valid), ""}
+
+      {status, good, rest} when status in [:incomplete, :error] and is_binary(good) and is_binary(rest) ->
+        prefix =
+          if rest == "" do
+            ""
+          else
+            binary_part(rest, 0, min(byte_size(rest), 16))
+          end
+
+        {status, byte_size(good), Base.encode16(prefix, case: :lower)}
+    end
+  end
 
   defp needs_input?(method, payload)
        when is_binary(method) and is_map(payload) do
