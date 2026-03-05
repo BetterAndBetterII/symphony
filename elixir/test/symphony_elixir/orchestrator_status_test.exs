@@ -944,15 +944,20 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
     end)
 
     send(pid, :tick)
-    snapshot =
-      wait_for_snapshot(pid, fn
-        %{retrying: retrying, running: running}
-        when is_list(retrying) and is_list(running) ->
-          Enum.any?(retrying, &(&1.issue_id == issue_id)) and Enum.all?(running, &(&1.issue_id != issue_id))
 
-        _ ->
-          false
-      end, 1_000)
+    snapshot =
+      wait_for_snapshot(
+        pid,
+        fn
+          %{retrying: retrying, running: running}
+          when is_list(retrying) and is_list(running) ->
+            Enum.any?(retrying, &(&1.issue_id == issue_id)) and Enum.all?(running, &(&1.issue_id != issue_id))
+
+          _ ->
+            false
+        end,
+        1_000
+      )
 
     refute Process.alive?(worker_pid)
 

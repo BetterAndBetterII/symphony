@@ -180,6 +180,60 @@ defmodule SymphonyElixir.CoreTest do
     assert Workflow.workflow_file_path() == app_workflow_path
   end
 
+  test "workflow file path resolves from SYMPHONY_WORKFLOW_FILE_PATH env var when set" do
+    previous_env_path = System.get_env("SYMPHONY_WORKFLOW_FILE_PATH")
+    original_workflow_path = Workflow.workflow_file_path()
+
+    on_exit(fn ->
+      restore_env("SYMPHONY_WORKFLOW_FILE_PATH", previous_env_path)
+      Workflow.set_workflow_file_path(original_workflow_path)
+    end)
+
+    Workflow.clear_workflow_file_path()
+
+    System.put_env("SYMPHONY_WORKFLOW_FILE_PATH", "   ")
+    assert Workflow.workflow_file_path() == Path.join(File.cwd!(), "WORKFLOW.md")
+
+    System.put_env("SYMPHONY_WORKFLOW_FILE_PATH", " ./ENV_WORKFLOW.md ")
+    assert Workflow.workflow_file_path() == Path.expand("./ENV_WORKFLOW.md")
+  end
+
+  test "init_default_workflow_file writes a template and is idempotent" do
+    tmp_root =
+      Path.join(System.tmp_dir!(), "symphony-elixir-default-workflow-#{System.unique_integer([:positive])}")
+
+    path = Path.join(tmp_root, "WORKFLOW.md")
+
+    try do
+      assert :ok = Workflow.init_default_workflow_file(path)
+      assert File.regular?(path)
+      first_content = File.read!(path)
+
+      assert :ok = Workflow.init_default_workflow_file(path)
+      assert File.read!(path) == first_content
+    after
+      File.rm_rf(tmp_root)
+    end
+  end
+
+  test "init_default_workflow_file returns an error when write fails" do
+    tmp_root =
+      Path.join(System.tmp_dir!(), "symphony-elixir-default-workflow-ro-#{System.unique_integer([:positive])}")
+
+    path = Path.join(tmp_root, "WORKFLOW.md")
+
+    try do
+      File.mkdir_p!(tmp_root)
+      File.chmod!(tmp_root, 0o500)
+
+      assert {:error, reason} = Workflow.init_default_workflow_file(path)
+      assert reason in [:eacces, :eperm]
+    after
+      File.chmod!(tmp_root, 0o700)
+      File.rm_rf(tmp_root)
+    end
+  end
+
   test "workflow load accepts prompt-only files without front matter" do
     workflow_path = Path.join(Path.dirname(Workflow.workflow_file_path()), "PROMPT_ONLY_WORKFLOW.md")
     File.write!(workflow_path, "Prompt only\n")

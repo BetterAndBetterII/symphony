@@ -134,6 +134,98 @@ defmodule SymphonyElixir.ExtensionsTest do
     assert {:stop, {:missing_workflow_file, ^missing_path, :enoent}} = WorkflowStore.init([])
   end
 
+  test "workflow store init stops on invalid workflow file content" do
+    invalid_path = Path.join(Path.dirname(Workflow.workflow_file_path()), "INVALID_WORKFLOW.md")
+    original_workflow_path = Workflow.workflow_file_path()
+
+    on_exit(fn ->
+      Workflow.set_workflow_file_path(original_workflow_path)
+      File.rm_rf(invalid_path)
+    end)
+
+    File.write!(invalid_path, "---\n- not-a-map\n---\nPrompt\n")
+    Workflow.set_workflow_file_path(invalid_path)
+
+    assert {:stop, :workflow_front_matter_not_a_map} = WorkflowStore.init([])
+  end
+
+  test "workflow store bootstraps a default WORKFLOW.md when missing in the current directory" do
+    workflow_store_pid = Process.whereis(WorkflowStore)
+    original_workflow_path = Workflow.workflow_file_path()
+    original_env_path = System.get_env("SYMPHONY_WORKFLOW_FILE_PATH")
+    original_cwd = File.cwd!()
+
+    tmp_root =
+      Path.join(System.tmp_dir!(), "symphony-elixir-workflow-bootstrap-#{System.unique_integer([:positive])}")
+
+    on_exit(fn ->
+      File.cd!(original_cwd)
+      restore_env("SYMPHONY_WORKFLOW_FILE_PATH", original_env_path)
+      Workflow.set_workflow_file_path(original_workflow_path)
+      File.rm_rf(tmp_root)
+
+      if is_pid(workflow_store_pid) and is_nil(Process.whereis(WorkflowStore)) do
+        Supervisor.restart_child(SymphonyElixir.Supervisor, WorkflowStore)
+      end
+    end)
+
+    if is_pid(workflow_store_pid) do
+      Supervisor.terminate_child(SymphonyElixir.Supervisor, WorkflowStore)
+    end
+
+    File.mkdir_p!(tmp_root)
+    File.cd!(tmp_root)
+
+    Workflow.clear_workflow_file_path()
+    System.delete_env("SYMPHONY_WORKFLOW_FILE_PATH")
+
+    assert {:ok, %WorkflowStore.State{path: path}} = WorkflowStore.init([])
+    assert path == Path.join(tmp_root, "WORKFLOW.md")
+    assert File.regular?(path)
+    assert_receive :poll, 1_100
+  end
+
+  test "workflow store bootstrap stops when default WORKFLOW.md cannot be written" do
+    workflow_store_pid = Process.whereis(WorkflowStore)
+    original_workflow_path = Workflow.workflow_file_path()
+    original_env_path = System.get_env("SYMPHONY_WORKFLOW_FILE_PATH")
+    original_cwd = File.cwd!()
+
+    tmp_root =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-elixir-workflow-bootstrap-ro-#{System.unique_integer([:positive])}"
+      )
+
+    on_exit(fn ->
+      File.cd!(original_cwd)
+      restore_env("SYMPHONY_WORKFLOW_FILE_PATH", original_env_path)
+      Workflow.set_workflow_file_path(original_workflow_path)
+
+      File.chmod!(tmp_root, 0o700)
+      File.rm_rf(tmp_root)
+
+      if is_pid(workflow_store_pid) and is_nil(Process.whereis(WorkflowStore)) do
+        Supervisor.restart_child(SymphonyElixir.Supervisor, WorkflowStore)
+      end
+    end)
+
+    if is_pid(workflow_store_pid) do
+      Supervisor.terminate_child(SymphonyElixir.Supervisor, WorkflowStore)
+    end
+
+    File.mkdir_p!(tmp_root)
+    File.chmod!(tmp_root, 0o500)
+    File.cd!(tmp_root)
+
+    Workflow.clear_workflow_file_path()
+    System.delete_env("SYMPHONY_WORKFLOW_FILE_PATH")
+
+    assert {:stop, {:failed_to_create_default_workflow_file, path, reason}} = WorkflowStore.init([])
+    assert path == Path.join(tmp_root, "WORKFLOW.md")
+    assert reason in [:eacces, :eperm]
+  end
+
   test "workflow store start_link and poll callback cover missing-file error paths" do
     ensure_workflow_store_running()
     existing_path = Workflow.workflow_file_path()
