@@ -31,7 +31,8 @@ Symphony stops the active agent for that issue and cleans up matching workspaces
 1. Make sure your codebase is set up to work well with agents: see
    [Harness engineering](https://openai.com/index/harness-engineering/).
 2. Get a new personal token in Linear via Settings → Security & access → Personal API keys, and
-   set it as the `LINEAR_API_KEY` environment variable.
+   set it as the `LINEAR_API_KEY` environment variable. Also set your project's slug as
+   `LINEAR_PROJECT_SLUG`.
 3. Copy this directory's `WORKFLOW.md` to your repo.
 4. Optionally copy the `commit`, `push`, `pull`, `land`, and `linear` skills to your repo.
    - The `linear` skill expects Symphony's `linear_graphql` app-server tool for raw Linear GraphQL
@@ -74,7 +75,7 @@ If `WORKFLOW.md` is missing, Symphony will create a starter template in the curr
 ```bash
 git clone https://github.com/openai/symphony
 cd symphony/elixir
-mise trust
+mise trust -y
 mise install
 mise exec -- mix setup
 mise exec -- mix build
@@ -105,9 +106,9 @@ Minimal example:
 ---
 tracker:
   kind: linear
-  project_slug: "..."
+  project_slug: "$LINEAR_PROJECT_SLUG"
 workspace:
-  root: ~/code/workspaces
+  root: "$SYMPHONY_WORKSPACE_ROOT"
 hooks:
   after_create: |
     git clone git@github.com:your-org/your-repo.git .
@@ -143,6 +144,8 @@ Notes:
 - If a hook needs `mise exec` inside a freshly cloned workspace, trust the repo config and fetch
   the project dependencies in `hooks.after_create` before invoking `mise` later from other hooks.
 - `tracker.api_key` reads from `LINEAR_API_KEY` when unset or when value is `$LINEAR_API_KEY`.
+- `tracker.project_slug` reads from `LINEAR_PROJECT_SLUG` when unset or when value is
+  `$LINEAR_PROJECT_SLUG`.
 - For path values, `~` is expanded to the home directory.
 - For env-backed path values, use `$VAR`. `workspace.root` resolves `$VAR` before path handling,
   while `codex.command` stays a shell command string and any `$VAR` expansion there happens in the
@@ -151,6 +154,7 @@ Notes:
 ```yaml
 tracker:
   api_key: $LINEAR_API_KEY
+  project_slug: $LINEAR_PROJECT_SLUG
 workspace:
   root: $SYMPHONY_WORKSPACE_ROOT
 hooks:
