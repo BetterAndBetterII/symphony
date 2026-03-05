@@ -950,9 +950,7 @@ defmodule SymphonyElixir.Codex.AppServer do
       rescue
         error in Jason.EncodeError ->
           if invalid_utf8_encode_error?(error) do
-            Logger.warning(
-              "Codex JSON-RPC payload contained invalid UTF-8; sanitizing and retrying encode."
-            )
+            Logger.warning("Codex JSON-RPC payload contained invalid UTF-8; sanitizing and retrying encode.")
 
             message
             |> sanitize_json_strings()
