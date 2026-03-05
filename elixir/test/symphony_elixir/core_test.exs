@@ -197,6 +197,62 @@ defmodule SymphonyElixir.CoreTest do
     assert :ok = Config.validate!()
   end
 
+  test "github project owner and number resolve from env vars when missing in workflow" do
+    previous_github_api_key = System.get_env("GITHUB_TOKEN")
+    previous_owner = System.get_env("GITHUB_PROJECT_OWNER")
+    previous_number = System.get_env("GITHUB_PROJECT_NUMBER")
+
+    on_exit(fn ->
+      restore_env("GITHUB_TOKEN", previous_github_api_key)
+      restore_env("GITHUB_PROJECT_OWNER", previous_owner)
+      restore_env("GITHUB_PROJECT_NUMBER", previous_number)
+    end)
+
+    System.put_env("GITHUB_TOKEN", "test-github-api-key")
+    System.put_env("GITHUB_PROJECT_OWNER", "example-org")
+    System.put_env("GITHUB_PROJECT_NUMBER", "1")
+
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "github_project",
+      tracker_api_token: nil,
+      tracker_project_owner: nil,
+      tracker_project_number: nil,
+      codex_command: "/bin/sh app-server"
+    )
+
+    assert Config.github_project_owner() == "example-org"
+    assert Config.github_project_number() == 1
+    assert :ok = Config.validate!()
+  end
+
+  test "github project owner and number resolve from env references in workflow" do
+    previous_github_api_key = System.get_env("GITHUB_TOKEN")
+    previous_owner = System.get_env("GITHUB_PROJECT_OWNER")
+    previous_number = System.get_env("GITHUB_PROJECT_NUMBER")
+
+    on_exit(fn ->
+      restore_env("GITHUB_TOKEN", previous_github_api_key)
+      restore_env("GITHUB_PROJECT_OWNER", previous_owner)
+      restore_env("GITHUB_PROJECT_NUMBER", previous_number)
+    end)
+
+    System.put_env("GITHUB_TOKEN", "test-github-api-key")
+    System.put_env("GITHUB_PROJECT_OWNER", "example-org")
+    System.put_env("GITHUB_PROJECT_NUMBER", "1")
+
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "github_project",
+      tracker_api_token: nil,
+      tracker_project_owner: "$GITHUB_PROJECT_OWNER",
+      tracker_project_number: "$GITHUB_PROJECT_NUMBER",
+      codex_command: "/bin/sh app-server"
+    )
+
+    assert Config.github_project_owner() == "example-org"
+    assert Config.github_project_number() == 1
+    assert :ok = Config.validate!()
+  end
+
   test "tracker assignee resolves from GITHUB_ASSIGNEE env var" do
     previous_assignee = System.get_env("GITHUB_ASSIGNEE")
     env_assignee = "dev@example.com"
