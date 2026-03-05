@@ -83,7 +83,10 @@ defmodule SymphonyElixir.Workflow do
   end
 
   defp split_front_matter(content) do
-    lines = String.split(content, ~r/\R/, trim: false)
+    # NOTE: Must split in Unicode mode. Without the `u` flag, `\R` can match the
+    # byte 0x85 (NEL) inside UTF-8 sequences (for example in Chinese text),
+    # corrupting the prompt into invalid UTF-8.
+    lines = String.split(content, ~r/\R/u, trim: false)
 
     case lines do
       ["---" | tail] ->
