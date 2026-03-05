@@ -263,7 +263,8 @@ defmodule SymphonyElixir.Config do
           trimmed -> trimmed
         end
 
-      _ -> "Status"
+      _ ->
+        "Status"
     end
   end
 

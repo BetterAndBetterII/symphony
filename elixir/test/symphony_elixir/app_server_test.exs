@@ -283,7 +283,7 @@ defmodule SymphonyElixir.AppServerTest do
                    |> Jason.decode!()
 
                  payload["id"] == 2 and
-                     case get_in(payload, ["params", "dynamicTools"]) do
+                   case get_in(payload, ["params", "dynamicTools"]) do
                      [
                        %{
                          "description" => description,

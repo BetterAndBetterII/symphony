@@ -44,4 +44,3 @@ defmodule SymphonyElixir.Tracker.Issue do
     labels
   end
 end
-

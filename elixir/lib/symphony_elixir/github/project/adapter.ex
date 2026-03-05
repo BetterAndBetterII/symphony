@@ -311,12 +311,12 @@ defmodule SymphonyElixir.GitHub.Project.Adapter do
       ids ->
         with {:ok, assignee_filter} <- routing_assignee_filter(),
              {:ok, body} <-
-             client_module().graphql(@items_by_id_query, %{
-               ids: ids,
-               fieldValuesFirst: @field_values_first,
-               labelsFirst: @labels_first,
-               assigneesFirst: @assignees_first
-             }),
+               client_module().graphql(@items_by_id_query, %{
+                 ids: ids,
+                 fieldValuesFirst: @field_values_first,
+                 labelsFirst: @labels_first,
+                 assigneesFirst: @assignees_first
+               }),
              :ok <- ensure_no_graphql_errors(body) do
           items = get_in(body, ["data", "nodes"]) || []
           status_field = Config.github_project_status_field()

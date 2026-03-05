@@ -62,9 +62,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
     System.put_env("GITHUB_TOKEN", "token-123")
 
     assert {:error, {:github_api_status, 503}} =
-             Client.graphql("query Viewer { viewer { login } }", %{},
-               request_fun: fn _payload, _headers -> {:ok, %{status: 503, body: "nope"}} end
-             )
+             Client.graphql("query Viewer { viewer { login } }", %{}, request_fun: fn _payload, _headers -> {:ok, %{status: 503, body: "nope"}} end)
   end
 
   test "graphql maps transport errors to {:github_api_request, reason}" do
@@ -74,9 +72,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
     System.put_env("GITHUB_TOKEN", "token-123")
 
     assert {:error, {:github_api_request, :timeout}} =
-             Client.graphql("query Viewer { viewer { login } }", %{},
-               request_fun: fn _payload, _headers -> {:error, :timeout} end
-             )
+             Client.graphql("query Viewer { viewer { login } }", %{}, request_fun: fn _payload, _headers -> {:error, :timeout} end)
   end
 
   test "graphql omits operationName when operation_name is blank or non-binary" do
