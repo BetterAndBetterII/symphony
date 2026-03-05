@@ -107,6 +107,17 @@ You are working on a Linear issue {{ issue.identifier }}.
 Title: {{ issue.title }} Body: {{ issue.description }}
 ```
 
+Optional GitHub ProjectV2 config (used for fetching the latest project field metadata, such as the
+`Status` field options):
+
+```yaml
+github_project:
+  owner: "your-org"
+  owner_type: "organization"
+  project_number: 1
+  api_key: $GITHUB_TOKEN
+```
+
 Notes:
 
 - If a value is missing, defaults are used.
@@ -127,6 +138,7 @@ Notes:
 - If a hook needs `mise exec` inside a freshly cloned workspace, trust the repo config and fetch
   the project dependencies in `hooks.after_create` before invoking `mise` later from other hooks.
 - `tracker.api_key` reads from `LINEAR_API_KEY` when unset or when value is `$LINEAR_API_KEY`.
+- `github_project.api_key` reads from `GITHUB_TOKEN` when unset or when value is `$GITHUB_TOKEN`.
 - For path values, `~` is expanded to the home directory.
 - For env-backed path values, use `$VAR`. `workspace.root` resolves `$VAR` before path handling,
   while `codex.command` stays a shell command string and any `$VAR` expansion there happens in the

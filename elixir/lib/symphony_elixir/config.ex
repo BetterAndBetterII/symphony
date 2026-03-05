@@ -4,11 +4,14 @@ defmodule SymphonyElixir.Config do
   """
 
   alias NimbleOptions
+  alias SymphonyElixir.GitHubProject.ProjectLocator
   alias SymphonyElixir.Workflow
 
   @default_active_states ["Todo", "In Progress"]
   @default_terminal_states ["Closed", "Cancelled", "Canceled", "Duplicate", "Done"]
   @default_linear_endpoint "https://api.linear.app/graphql"
+  @default_github_graphql_endpoint "https://api.github.com/graphql"
+  @default_github_project_status_field_name "Status"
   @default_prompt_template """
   You are working on a Linear issue.
 
@@ -61,6 +64,21 @@ defmodule SymphonyElixir.Config do
                                  terminal_states: [
                                    type: {:list, :string},
                                    default: @default_terminal_states
+                                 ]
+                               ]
+                             ],
+                             github_project: [
+                               type: :map,
+                               default: %{},
+                               keys: [
+                                 endpoint: [type: :string, default: @default_github_graphql_endpoint],
+                                 api_key: [type: {:or, [:string, nil]}, default: nil],
+                                 owner: [type: {:or, [:string, nil]}, default: nil],
+                                 owner_type: [type: {:or, [:string, nil]}, default: nil],
+                                 project_number: [type: {:or, [:pos_integer, nil]}, default: nil],
+                                 status_field_name: [
+                                   type: :string,
+                                   default: @default_github_project_status_field_name
                                  ]
                                ]
                              ],
@@ -217,6 +235,51 @@ defmodule SymphonyElixir.Config do
   @spec linear_terminal_states() :: [String.t()]
   def linear_terminal_states do
     get_in(validated_workflow_options(), [:tracker, :terminal_states])
+  end
+
+  @spec github_project_endpoint() :: String.t()
+  def github_project_endpoint do
+    get_in(validated_workflow_options(), [:github_project, :endpoint])
+  end
+
+  @spec github_project_api_token() :: String.t() | nil
+  def github_project_api_token do
+    validated_workflow_options()
+    |> get_in([:github_project, :api_key])
+    |> resolve_env_value(System.get_env("GITHUB_TOKEN"))
+    |> normalize_secret_value()
+  end
+
+  @spec github_project_owner() :: String.t() | nil
+  def github_project_owner do
+    get_in(validated_workflow_options(), [:github_project, :owner])
+  end
+
+  @spec github_project_owner_type() :: String.t() | nil
+  def github_project_owner_type do
+    get_in(validated_workflow_options(), [:github_project, :owner_type])
+  end
+
+  @spec github_project_number() :: pos_integer() | nil
+  def github_project_number do
+    get_in(validated_workflow_options(), [:github_project, :project_number])
+  end
+
+  @spec github_project_status_field_name() :: String.t()
+  def github_project_status_field_name do
+    get_in(validated_workflow_options(), [:github_project, :status_field_name])
+  end
+
+  @spec github_project_locator() :: {:ok, ProjectLocator.t()} | {:error, term()}
+  def github_project_locator do
+    ProjectLocator.parse(%{
+      endpoint: github_project_endpoint(),
+      token: github_project_api_token(),
+      owner: github_project_owner(),
+      owner_type: github_project_owner_type(),
+      project_number: github_project_number(),
+      status_field_name: github_project_status_field_name()
+    })
   end
 
   @spec poll_interval_ms() :: pos_integer()
@@ -447,6 +510,7 @@ defmodule SymphonyElixir.Config do
   defp extract_workflow_options(config) do
     %{
       tracker: extract_tracker_options(section_map(config, "tracker")),
+      github_project: extract_github_project_options(section_map(config, "github_project")),
       polling: extract_polling_options(section_map(config, "polling")),
       workspace: extract_workspace_options(section_map(config, "workspace")),
       agent: extract_agent_options(section_map(config, "agent")),
@@ -465,6 +529,16 @@ defmodule SymphonyElixir.Config do
     |> put_if_present(:project_slug, scalar_string_value(Map.get(section, "project_slug")))
     |> put_if_present(:active_states, csv_value(Map.get(section, "active_states")))
     |> put_if_present(:terminal_states, csv_value(Map.get(section, "terminal_states")))
+  end
+
+  defp extract_github_project_options(section) do
+    %{}
+    |> put_if_present(:endpoint, scalar_string_value(Map.get(section, "endpoint")))
+    |> put_if_present(:api_key, binary_value(Map.get(section, "api_key"), allow_empty: true))
+    |> put_if_present(:owner, scalar_string_value(Map.get(section, "owner")))
+    |> put_if_present(:owner_type, scalar_string_value(Map.get(section, "owner_type")))
+    |> put_if_present(:project_number, positive_integer_value(Map.get(section, "project_number")))
+    |> put_if_present(:status_field_name, scalar_string_value(Map.get(section, "status_field_name")))
   end
 
   defp extract_polling_options(section) do

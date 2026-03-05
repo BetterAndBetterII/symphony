@@ -99,6 +99,12 @@ defmodule SymphonyElixir.TestSupport do
           tracker_assignee: nil,
           tracker_active_states: ["Todo", "In Progress"],
           tracker_terminal_states: ["Closed", "Cancelled", "Canceled", "Duplicate", "Done"],
+          github_project_endpoint: nil,
+          github_project_api_token: nil,
+          github_project_owner: nil,
+          github_project_owner_type: nil,
+          github_project_number: nil,
+          github_project_status_field_name: nil,
           poll_interval_ms: 30_000,
           workspace_root: Path.join(System.tmp_dir!(), "symphony_workspaces"),
           max_concurrent_agents: 10,
@@ -134,6 +140,12 @@ defmodule SymphonyElixir.TestSupport do
     tracker_assignee = Keyword.get(config, :tracker_assignee)
     tracker_active_states = Keyword.get(config, :tracker_active_states)
     tracker_terminal_states = Keyword.get(config, :tracker_terminal_states)
+    github_project_endpoint = Keyword.get(config, :github_project_endpoint)
+    github_project_api_token = Keyword.get(config, :github_project_api_token)
+    github_project_owner = Keyword.get(config, :github_project_owner)
+    github_project_owner_type = Keyword.get(config, :github_project_owner_type)
+    github_project_number = Keyword.get(config, :github_project_number)
+    github_project_status_field_name = Keyword.get(config, :github_project_status_field_name)
     poll_interval_ms = Keyword.get(config, :poll_interval_ms)
     workspace_root = Keyword.get(config, :workspace_root)
     max_concurrent_agents = Keyword.get(config, :max_concurrent_agents)
@@ -170,6 +182,14 @@ defmodule SymphonyElixir.TestSupport do
         "  assignee: #{yaml_value(tracker_assignee)}",
         "  active_states: #{yaml_value(tracker_active_states)}",
         "  terminal_states: #{yaml_value(tracker_terminal_states)}",
+        github_project_yaml(
+          github_project_endpoint,
+          github_project_api_token,
+          github_project_owner,
+          github_project_owner_type,
+          github_project_number,
+          github_project_status_field_name
+        ),
         "polling:",
         "  interval_ms: #{yaml_value(poll_interval_ms)}",
         "workspace:",
@@ -252,6 +272,22 @@ defmodule SymphonyElixir.TestSupport do
       "server:",
       port && "  port: #{yaml_value(port)}",
       host && "  host: #{yaml_value(host)}"
+    ]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join("\n")
+  end
+
+  defp github_project_yaml(nil, nil, nil, nil, nil, nil), do: nil
+
+  defp github_project_yaml(endpoint, api_key, owner, owner_type, project_number, status_field_name) do
+    [
+      "github_project:",
+      endpoint && "  endpoint: #{yaml_value(endpoint)}",
+      api_key && "  api_key: #{yaml_value(api_key)}",
+      owner && "  owner: #{yaml_value(owner)}",
+      owner_type && "  owner_type: #{yaml_value(owner_type)}",
+      project_number && "  project_number: #{yaml_value(project_number)}",
+      status_field_name && "  status_field_name: #{yaml_value(status_field_name)}"
     ]
     |> Enum.reject(&is_nil/1)
     |> Enum.join("\n")

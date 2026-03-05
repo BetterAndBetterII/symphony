@@ -557,6 +557,12 @@ This section is intentionally redundant so a coding agent can implement the conf
 - `tracker.project_slug`: string, required when `tracker.kind=linear`
 - `tracker.active_states`: list/string, default `Todo, In Progress`
 - `tracker.terminal_states`: list/string, default `Closed, Cancelled, Canceled, Duplicate, Done`
+- `github_project.endpoint` (extension): string, default `https://api.github.com/graphql`
+- `github_project.api_key` (extension): string or `$VAR`, canonical env `GITHUB_TOKEN`
+- `github_project.owner` (extension): string, GitHub login owning the ProjectV2 (org or user)
+- `github_project.owner_type` (extension): string, `organization` or `user`
+- `github_project.project_number` (extension): positive integer, ProjectV2 number under the owner
+- `github_project.status_field_name` (extension): string, default `Status`
 - `polling.interval_ms`: integer, default `30000`
 - `workspace.root`: path, default `<system-temp>/symphony_workspaces`
 - `hooks.after_create`: shell script or null
