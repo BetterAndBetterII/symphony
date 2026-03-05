@@ -638,9 +638,16 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
   end
 
   test "config reads defaults for optional settings" do
-    previous_linear_api_key = System.get_env("LINEAR_API_KEY")
-    on_exit(fn -> restore_env("LINEAR_API_KEY", previous_linear_api_key) end)
-    System.delete_env("LINEAR_API_KEY")
+    previous_github_token = System.get_env("GITHUB_TOKEN")
+    previous_gh_token = System.get_env("GH_TOKEN")
+
+    on_exit(fn ->
+      restore_env("GITHUB_TOKEN", previous_github_token)
+      restore_env("GH_TOKEN", previous_gh_token)
+    end)
+
+    System.delete_env("GITHUB_TOKEN")
+    System.delete_env("GH_TOKEN")
 
     write_workflow_file!(Workflow.workflow_file_path(),
       workspace_root: nil,
@@ -652,12 +659,14 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
       codex_read_timeout_ms: nil,
       codex_stall_timeout_ms: nil,
       tracker_api_token: nil,
-      tracker_project_slug: nil
+      tracker_project_owner: nil,
+      tracker_project_number: nil
     )
 
-    assert Config.linear_endpoint() == "https://api.linear.app/graphql"
-    assert Config.linear_api_token() == nil
-    assert Config.linear_project_slug() == nil
+    assert Config.github_endpoint() == "https://api.github.com/graphql"
+    assert Config.github_api_token() == nil
+    assert Config.github_project_owner() == nil
+    assert Config.github_project_number() == nil
     assert Config.workspace_root() == Path.join(System.tmp_dir!(), "symphony_workspaces")
     assert Config.max_concurrent_agents() == 10
     assert Config.codex_command() == "codex app-server"
@@ -703,7 +712,7 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
            }
 
     write_workflow_file!(Workflow.workflow_file_path(), tracker_active_states: ",")
-    assert Config.linear_active_states() == ["Todo", "In Progress"]
+    assert Config.tracker_active_states() == ["Todo", "In Progress"]
 
     write_workflow_file!(Workflow.workflow_file_path(), max_concurrent_agents: "bad")
     assert Config.max_concurrent_agents() == 10
@@ -732,8 +741,8 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
       server_host: 123
     )
 
-    assert Config.linear_active_states() == ["Todo", "In Progress"]
-    assert Config.linear_terminal_states() == ["Closed", "Cancelled", "Canceled", "Duplicate", "Done"]
+    assert Config.tracker_active_states() == ["Todo", "In Progress"]
+    assert Config.tracker_terminal_states() == ["Closed", "Cancelled", "Canceled", "Duplicate", "Done"]
     assert Config.poll_interval_ms() == 30_000
     assert Config.workspace_root() == Path.join(System.tmp_dir!(), "symphony_workspaces")
     assert Config.max_retry_backoff_ms() == 300_000
@@ -801,7 +810,7 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
 
   test "config resolves $VAR references for env-backed secret and path values" do
     workspace_env_var = "SYMP_WORKSPACE_ROOT_#{System.unique_integer([:positive])}"
-    api_key_env_var = "SYMP_LINEAR_API_KEY_#{System.unique_integer([:positive])}"
+    api_key_env_var = "SYMP_GITHUB_TOKEN_#{System.unique_integer([:positive])}"
     workspace_root = Path.join("/tmp", "symphony-workspace-root")
     api_key = "resolved-secret"
     codex_bin = Path.join(["~", "bin", "codex"])
@@ -823,14 +832,14 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
       codex_command: "#{codex_bin} app-server"
     )
 
-    assert Config.linear_api_token() == api_key
+    assert Config.github_api_token() == api_key
     assert Config.workspace_root() == Path.expand(workspace_root)
     assert Config.codex_command() == "#{codex_bin} app-server"
   end
 
   test "config no longer resolves legacy env: references" do
     workspace_env_var = "SYMP_WORKSPACE_ROOT_#{System.unique_integer([:positive])}"
-    api_key_env_var = "SYMP_LINEAR_API_KEY_#{System.unique_integer([:positive])}"
+    api_key_env_var = "SYMP_GITHUB_TOKEN_#{System.unique_integer([:positive])}"
     workspace_root = Path.join("/tmp", "symphony-workspace-root")
     api_key = "resolved-secret"
 
@@ -850,7 +859,7 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
       workspace_root: "env:#{workspace_env_var}"
     )
 
-    assert Config.linear_api_token() == "env:#{api_key_env_var}"
+    assert Config.github_api_token() == "env:#{api_key_env_var}"
     assert Config.workspace_root() == "env:#{workspace_env_var}"
   end
 

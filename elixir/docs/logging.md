@@ -12,8 +12,8 @@ This guide defines logging conventions for Symphony so Codex can diagnose failur
 
 When logging issue-related work, include both identifiers:
 
-- `issue_id`: Linear internal UUID (stable foreign key).
-- `issue_identifier`: human ticket key (for example `MT-620`).
+- `issue_id`: tracker-specific stable id (for GitHub Projects this is the ProjectV2 item id).
+- `issue_identifier`: human-readable identifier (for example `owner/repo#123`).
 
 When logging Codex execution lifecycle events, include:
 
@@ -34,7 +34,7 @@ When logging Codex execution lifecycle events, include:
 
 ## Checklist For New Logs
 
-- Is this event tied to a Linear issue? Include `issue_id` and `issue_identifier`.
+- Is this event tied to a tracked issue? Include `issue_id` and `issue_identifier`.
 - Is this event tied to a Codex session? Include `session_id`.
 - Is the failure reason present and concise?
 - Is the message format consistent with existing lifecycle logs?

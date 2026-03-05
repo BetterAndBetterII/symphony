@@ -391,9 +391,25 @@ defmodule SymphonyElixir.StatusDashboard do
 
   defp format_project_link_lines do
     project_part =
-      case Config.linear_project_slug() do
-        project_slug when is_binary(project_slug) and project_slug != "" ->
-          colorize(linear_project_url(project_slug), @ansi_cyan)
+      case Config.tracker_kind() do
+        "github_project" ->
+          owner = Config.github_project_owner()
+          number = Config.github_project_number()
+
+          if is_binary(owner) and owner != "" and is_integer(number) do
+            colorize("GitHub Project #{owner}##{number}", @ansi_cyan)
+          else
+            colorize("n/a", @ansi_gray)
+          end
+
+        "linear" ->
+          case Config.linear_project_slug() do
+            project_slug when is_binary(project_slug) and project_slug != "" ->
+              colorize(linear_project_url(project_slug), @ansi_cyan)
+
+            _ ->
+              colorize("n/a", @ansi_gray)
+          end
 
         _ ->
           colorize("n/a", @ansi_gray)

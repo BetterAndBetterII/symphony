@@ -12,7 +12,7 @@ defmodule SymphonyElixir.TestSupport do
       alias SymphonyElixir.Config
       alias SymphonyElixir.HttpServer
       alias SymphonyElixir.Linear.Client
-      alias SymphonyElixir.Linear.Issue
+      alias SymphonyElixir.Tracker.Issue
       alias SymphonyElixir.Orchestrator
       alias SymphonyElixir.PromptBuilder
       alias SymphonyElixir.StatusDashboard
@@ -22,7 +22,13 @@ defmodule SymphonyElixir.TestSupport do
       alias SymphonyElixir.Workspace
 
       import SymphonyElixir.TestSupport,
-        only: [write_workflow_file!: 1, write_workflow_file!: 2, restore_env: 2, stop_default_http_server: 0]
+        only: [
+          write_workflow_file!: 1,
+          write_workflow_file!: 2,
+          restore_env: 2,
+          stop_default_http_server: 0,
+          skip_if_tcp_blocked: 0
+        ]
 
       setup do
         workflow_root =
@@ -69,6 +75,32 @@ defmodule SymphonyElixir.TestSupport do
   def restore_env(key, nil), do: System.delete_env(key)
   def restore_env(key, value), do: System.put_env(key, value)
 
+  # ExUnit skip tags are evaluated at compile time, so this helper needs to be
+  # side-effect free beyond a best-effort capability check.
+  def skip_if_tcp_blocked do
+    if tcp_sockets_blocked?() do
+      "TCP sockets are blocked in this environment"
+    else
+      false
+    end
+  end
+
+  defp tcp_sockets_blocked? do
+    opts = [:binary, ip: {127, 0, 0, 1}, active: false]
+
+    case :gen_tcp.listen(0, opts) do
+      {:ok, socket} ->
+        :gen_tcp.close(socket)
+        false
+
+      {:error, reason} when reason in [:eperm, :eacces] ->
+        true
+
+      {:error, _reason} ->
+        false
+    end
+  end
+
   def stop_default_http_server do
     case Enum.find(Supervisor.which_children(SymphonyElixir.Supervisor), fn
            {SymphonyElixir.HttpServer, _pid, _type, _modules} -> true
@@ -92,10 +124,13 @@ defmodule SymphonyElixir.TestSupport do
     config =
       Keyword.merge(
         [
-          tracker_kind: "linear",
-          tracker_endpoint: "https://api.linear.app/graphql",
-          tracker_api_token: "token",
-          tracker_project_slug: "project",
+          tracker_kind: "memory",
+          tracker_endpoint: nil,
+          tracker_api_token: nil,
+          tracker_project_slug: nil,
+          tracker_project_owner: nil,
+          tracker_project_number: nil,
+          tracker_project_field_status: "Status",
           tracker_assignee: nil,
           tracker_active_states: ["Todo", "In Progress"],
           tracker_terminal_states: ["Closed", "Cancelled", "Canceled", "Duplicate", "Done"],
@@ -131,6 +166,9 @@ defmodule SymphonyElixir.TestSupport do
     tracker_endpoint = Keyword.get(config, :tracker_endpoint)
     tracker_api_token = Keyword.get(config, :tracker_api_token)
     tracker_project_slug = Keyword.get(config, :tracker_project_slug)
+    tracker_project_owner = Keyword.get(config, :tracker_project_owner)
+    tracker_project_number = Keyword.get(config, :tracker_project_number)
+    tracker_project_field_status = Keyword.get(config, :tracker_project_field_status)
     tracker_assignee = Keyword.get(config, :tracker_assignee)
     tracker_active_states = Keyword.get(config, :tracker_active_states)
     tracker_terminal_states = Keyword.get(config, :tracker_terminal_states)
@@ -167,6 +205,9 @@ defmodule SymphonyElixir.TestSupport do
         "  endpoint: #{yaml_value(tracker_endpoint)}",
         "  api_key: #{yaml_value(tracker_api_token)}",
         "  project_slug: #{yaml_value(tracker_project_slug)}",
+        "  project_owner: #{yaml_value(tracker_project_owner)}",
+        "  project_number: #{yaml_value(tracker_project_number)}",
+        "  project_field_status: #{yaml_value(tracker_project_field_status)}",
         "  assignee: #{yaml_value(tracker_assignee)}",
         "  active_states: #{yaml_value(tracker_active_states)}",
         "  terminal_states: #{yaml_value(tracker_terminal_states)}",

@@ -1,6 +1,9 @@
-defmodule SymphonyElixir.Linear.Issue do
+defmodule SymphonyElixir.Tracker.Issue do
   @moduledoc """
-  Normalized Linear issue representation used by the orchestrator.
+  Normalized issue representation used by the orchestrator.
+
+  This struct is intentionally tracker-agnostic: each tracker adapter is
+  responsible for normalizing its native issue representation into this type.
   """
 
   defstruct [
@@ -41,3 +44,4 @@ defmodule SymphonyElixir.Linear.Issue do
     labels
   end
 end
+

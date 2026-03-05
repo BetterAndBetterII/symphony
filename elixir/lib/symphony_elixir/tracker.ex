@@ -4,24 +4,25 @@ defmodule SymphonyElixir.Tracker do
   """
 
   alias SymphonyElixir.Config
+  alias SymphonyElixir.Tracker.Issue
 
-  @callback fetch_candidate_issues() :: {:ok, [term()]} | {:error, term()}
-  @callback fetch_issues_by_states([String.t()]) :: {:ok, [term()]} | {:error, term()}
-  @callback fetch_issue_states_by_ids([String.t()]) :: {:ok, [term()]} | {:error, term()}
+  @callback fetch_candidate_issues() :: {:ok, [Issue.t()]} | {:error, term()}
+  @callback fetch_issues_by_states([String.t()]) :: {:ok, [Issue.t()]} | {:error, term()}
+  @callback fetch_issue_states_by_ids([String.t()]) :: {:ok, [Issue.t()]} | {:error, term()}
   @callback create_comment(String.t(), String.t()) :: :ok | {:error, term()}
   @callback update_issue_state(String.t(), String.t()) :: :ok | {:error, term()}
 
-  @spec fetch_candidate_issues() :: {:ok, [term()]} | {:error, term()}
+  @spec fetch_candidate_issues() :: {:ok, [Issue.t()]} | {:error, term()}
   def fetch_candidate_issues do
     adapter().fetch_candidate_issues()
   end
 
-  @spec fetch_issues_by_states([String.t()]) :: {:ok, [term()]} | {:error, term()}
+  @spec fetch_issues_by_states([String.t()]) :: {:ok, [Issue.t()]} | {:error, term()}
   def fetch_issues_by_states(states) do
     adapter().fetch_issues_by_states(states)
   end
 
-  @spec fetch_issue_states_by_ids([String.t()]) :: {:ok, [term()]} | {:error, term()}
+  @spec fetch_issue_states_by_ids([String.t()]) :: {:ok, [Issue.t()]} | {:error, term()}
   def fetch_issue_states_by_ids(issue_ids) do
     adapter().fetch_issue_states_by_ids(issue_ids)
   end
@@ -40,6 +41,7 @@ defmodule SymphonyElixir.Tracker do
   def adapter do
     case Config.tracker_kind() do
       "memory" -> SymphonyElixir.Tracker.Memory
+      "github_project" -> SymphonyElixir.GitHub.Project.Adapter
       _ -> SymphonyElixir.Linear.Adapter
     end
   end

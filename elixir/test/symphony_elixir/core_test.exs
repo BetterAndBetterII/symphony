@@ -2,9 +2,23 @@ defmodule SymphonyElixir.CoreTest do
   use SymphonyElixir.TestSupport
 
   test "config defaults and validation checks" do
+    previous_github_token = System.get_env("GITHUB_TOKEN")
+    previous_gh_token = System.get_env("GH_TOKEN")
+
+    on_exit(fn ->
+      restore_env("GITHUB_TOKEN", previous_github_token)
+      restore_env("GH_TOKEN", previous_gh_token)
+    end)
+
+    System.delete_env("GITHUB_TOKEN")
+    System.delete_env("GH_TOKEN")
+
     write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "github_project",
       tracker_api_token: nil,
       tracker_project_slug: nil,
+      tracker_project_owner: nil,
+      tracker_project_number: nil,
       poll_interval_ms: nil,
       tracker_active_states: nil,
       tracker_terminal_states: nil,
@@ -12,9 +26,9 @@ defmodule SymphonyElixir.CoreTest do
     )
 
     assert Config.poll_interval_ms() == 30_000
-    assert Config.linear_active_states() == ["Todo", "In Progress"]
-    assert Config.linear_terminal_states() == ["Closed", "Cancelled", "Canceled", "Duplicate", "Done"]
-    assert Config.linear_assignee() == nil
+    assert Config.tracker_active_states() == ["Todo", "In Progress"]
+    assert Config.tracker_terminal_states() == ["Closed", "Cancelled", "Canceled", "Duplicate", "Done"]
+    assert Config.tracker_assignee() == nil
     assert Config.agent_max_turns() == 20
 
     write_workflow_file!(Workflow.workflow_file_path(), poll_interval_ms: "invalid")
@@ -30,41 +44,103 @@ defmodule SymphonyElixir.CoreTest do
     assert Config.agent_max_turns() == 5
 
     write_workflow_file!(Workflow.workflow_file_path(), tracker_active_states: "Todo,  Review,")
-    assert Config.linear_active_states() == ["Todo", "Review"]
+    assert Config.tracker_active_states() == ["Todo", "Review"]
 
     write_workflow_file!(Workflow.workflow_file_path(),
-      tracker_api_token: "token",
-      tracker_project_slug: nil
+      tracker_kind: "github_project",
+      tracker_api_token: nil,
+      tracker_project_owner: "example-org",
+      tracker_project_number: 1
     )
 
-    assert {:error, :missing_linear_project_slug} = Config.validate!()
+    assert {:error, :missing_github_api_token} = Config.validate!()
 
     write_workflow_file!(Workflow.workflow_file_path(),
-      tracker_project_slug: "project",
+      tracker_kind: "github_project",
+      tracker_api_token: "token",
+      tracker_project_owner: nil,
+      tracker_project_number: 1
+    )
+
+    assert {:error, :missing_github_project_owner} = Config.validate!()
+
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "github_project",
+      tracker_api_token: "token",
+      tracker_project_owner: "example-org",
+      tracker_project_number: nil
+    )
+
+    assert {:error, :missing_github_project_number} = Config.validate!()
+
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "github_project",
+      tracker_api_token: "token",
+      tracker_project_owner: "example-org",
+      tracker_project_number: 1,
       codex_command: ""
     )
 
     assert :ok = Config.validate!()
 
-    write_workflow_file!(Workflow.workflow_file_path(), codex_command: "/bin/sh app-server")
-    assert :ok = Config.validate!()
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "github_project",
+      tracker_api_token: "token",
+      tracker_project_owner: "example-org",
+      tracker_project_number: 1,
+      codex_command: "/bin/sh app-server"
+    )
 
-    write_workflow_file!(Workflow.workflow_file_path(), codex_approval_policy: "definitely-not-valid")
-    assert :ok = Config.validate!()
-
-    write_workflow_file!(Workflow.workflow_file_path(), codex_thread_sandbox: "unsafe-ish")
     assert :ok = Config.validate!()
 
     write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "github_project",
+      tracker_api_token: "token",
+      tracker_project_owner: "example-org",
+      tracker_project_number: 1,
+      codex_approval_policy: "definitely-not-valid"
+    )
+
+    assert :ok = Config.validate!()
+
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "github_project",
+      tracker_api_token: "token",
+      tracker_project_owner: "example-org",
+      tracker_project_number: 1,
+      codex_thread_sandbox: "unsafe-ish"
+    )
+
+    assert :ok = Config.validate!()
+
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "github_project",
+      tracker_api_token: "token",
+      tracker_project_owner: "example-org",
+      tracker_project_number: 1,
       codex_turn_sandbox_policy: %{type: "workspaceWrite", writableRoots: ["relative/path"]}
     )
 
     assert :ok = Config.validate!()
 
-    write_workflow_file!(Workflow.workflow_file_path(), codex_approval_policy: 123)
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "github_project",
+      tracker_api_token: "token",
+      tracker_project_owner: "example-org",
+      tracker_project_number: 1,
+      codex_approval_policy: 123
+    )
+
     assert {:error, {:invalid_codex_approval_policy, 123}} = Config.validate!()
 
-    write_workflow_file!(Workflow.workflow_file_path(), codex_thread_sandbox: 123)
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "github_project",
+      tracker_api_token: "token",
+      tracker_project_owner: "example-org",
+      tracker_project_number: 1,
+      codex_thread_sandbox: 123
+    )
+
     assert {:error, {:invalid_codex_thread_sandbox, 123}} = Config.validate!()
 
     write_workflow_file!(Workflow.workflow_file_path(), tracker_kind: 123)
@@ -81,8 +157,10 @@ defmodule SymphonyElixir.CoreTest do
 
     tracker = Map.get(config, "tracker", %{})
     assert is_map(tracker)
-    assert Map.get(tracker, "kind") == "linear"
-    assert is_binary(Map.get(tracker, "project_slug"))
+    assert Map.get(tracker, "kind") == "github_project"
+    assert is_binary(Map.get(tracker, "project_owner"))
+    assert is_integer(Map.get(tracker, "project_number"))
+    assert is_binary(Map.get(tracker, "project_field_status"))
     assert is_list(Map.get(tracker, "active_states"))
     assert is_list(Map.get(tracker, "terminal_states"))
 
@@ -98,38 +176,43 @@ defmodule SymphonyElixir.CoreTest do
     assert Config.workflow_prompt() == prompt
   end
 
-  test "linear api token resolves from LINEAR_API_KEY env var" do
-    previous_linear_api_key = System.get_env("LINEAR_API_KEY")
-    env_api_key = "test-linear-api-key"
+  test "github api token resolves from GITHUB_TOKEN env var" do
+    previous_github_api_key = System.get_env("GITHUB_TOKEN")
+    env_api_key = "test-github-api-key"
 
-    on_exit(fn -> restore_env("LINEAR_API_KEY", previous_linear_api_key) end)
-    System.put_env("LINEAR_API_KEY", env_api_key)
+    on_exit(fn -> restore_env("GITHUB_TOKEN", previous_github_api_key) end)
+    System.put_env("GITHUB_TOKEN", env_api_key)
 
     write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "github_project",
       tracker_api_token: nil,
-      tracker_project_slug: "project",
+      tracker_project_owner: "example-org",
+      tracker_project_number: 1,
       codex_command: "/bin/sh app-server"
     )
 
-    assert Config.linear_api_token() == env_api_key
-    assert Config.linear_project_slug() == "project"
+    assert Config.github_api_token() == env_api_key
+    assert Config.github_project_owner() == "example-org"
+    assert Config.github_project_number() == 1
     assert :ok = Config.validate!()
   end
 
-  test "linear assignee resolves from LINEAR_ASSIGNEE env var" do
-    previous_linear_assignee = System.get_env("LINEAR_ASSIGNEE")
+  test "tracker assignee resolves from GITHUB_ASSIGNEE env var" do
+    previous_assignee = System.get_env("GITHUB_ASSIGNEE")
     env_assignee = "dev@example.com"
 
-    on_exit(fn -> restore_env("LINEAR_ASSIGNEE", previous_linear_assignee) end)
-    System.put_env("LINEAR_ASSIGNEE", env_assignee)
+    on_exit(fn -> restore_env("GITHUB_ASSIGNEE", previous_assignee) end)
+    System.put_env("GITHUB_ASSIGNEE", env_assignee)
 
     write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "github_project",
       tracker_assignee: nil,
-      tracker_project_slug: "project",
+      tracker_project_owner: "example-org",
+      tracker_project_number: 1,
       codex_command: "/bin/sh app-server"
     )
 
-    assert Config.linear_assignee() == env_assignee
+    assert Config.tracker_assignee() == env_assignee
   end
 
   test "workflow file path defaults to WORKFLOW.md in the current working directory when app env is unset" do
@@ -166,9 +249,9 @@ defmodule SymphonyElixir.CoreTest do
 
   test "workflow load accepts unterminated front matter with an empty prompt" do
     workflow_path = Path.join(Path.dirname(Workflow.workflow_file_path()), "UNTERMINATED_WORKFLOW.md")
-    File.write!(workflow_path, "---\ntracker:\n  kind: linear\n")
+    File.write!(workflow_path, "---\ntracker:\n  kind: github_project\n")
 
-    assert {:ok, %{config: %{"tracker" => %{"kind" => "linear"}}, prompt: "", prompt_template: ""}} =
+    assert {:ok, %{config: %{"tracker" => %{"kind" => "github_project"}}, prompt: "", prompt_template: ""}} =
              Workflow.load(workflow_path)
   end
 
@@ -668,7 +751,7 @@ defmodule SymphonyElixir.CoreTest do
 
     prompt = PromptBuilder.build_prompt(issue)
 
-    assert prompt =~ "You are working on a Linear issue."
+    assert prompt =~ "You are working on an issue from the configured tracker."
     assert prompt =~ "Identifier: MT-777"
     assert prompt =~ "Title: Make fallback prompt useful"
     assert prompt =~ "Body:"
@@ -744,7 +827,7 @@ defmodule SymphonyElixir.CoreTest do
 
     prompt = PromptBuilder.build_prompt(issue, attempt: 2)
 
-    assert prompt =~ "You are working on a Linear ticket `MT-616`"
+    assert prompt =~ "You are working on a GitHub issue tracked via GitHub Projects `MT-616`"
     assert prompt =~ "Issue context:"
     assert prompt =~ "Identifier: MT-616"
     assert prompt =~ "Title: Use rich templates for WORKFLOW.md"
