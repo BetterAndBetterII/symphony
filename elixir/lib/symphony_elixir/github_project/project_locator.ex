@@ -56,6 +56,8 @@ defmodule SymphonyElixir.GitHubProject.ProjectLocator do
 
   defp parse_non_empty(_value, error_atom), do: {:error, error_atom}
 
+  defp parse_owner_type(nil), do: {:error, :missing_github_project_owner_type}
+
   defp parse_owner_type(value) when is_atom(value) do
     parse_owner_type(Atom.to_string(value))
   end
@@ -73,7 +75,6 @@ defmodule SymphonyElixir.GitHubProject.ProjectLocator do
     end
   end
 
-  defp parse_owner_type(nil), do: {:error, :missing_github_project_owner_type}
   defp parse_owner_type(_value), do: {:error, :missing_github_project_owner_type}
 
   defp parse_project_number(value) when is_integer(value) and value > 0, do: {:ok, value}
@@ -100,4 +101,3 @@ defmodule SymphonyElixir.GitHubProject.ProjectLocator do
   defp parse_status_field_name(nil), do: {:ok, "Status"}
   defp parse_status_field_name(_value), do: {:ok, "Status"}
 end
-

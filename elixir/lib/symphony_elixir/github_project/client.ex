@@ -13,13 +13,14 @@ defmodule SymphonyElixir.GitHubProject.Client do
   @max_error_body_log_bytes 1_000
 
   @spec graphql(ProjectLocator.t(), String.t(), map(), keyword()) :: {:ok, map()} | {:error, term()}
-  def graphql(%ProjectLocator{} = locator, query, variables \\ %{}, opts \\ [])
+  def graphql(%ProjectLocator{} = locator, query, variables, opts)
       when is_binary(query) and is_map(variables) and is_list(opts) do
     payload = build_graphql_payload(query, variables, Keyword.get(opts, :operation_name))
+    req_options = Keyword.get(opts, :req_options, [])
 
     request_fun =
       Keyword.get(opts, :request_fun, fn payload, headers ->
-        post_graphql_request(locator.endpoint, payload, headers)
+        post_graphql_request(locator.endpoint, payload, headers, req_options)
       end)
 
     with {:ok, headers} <- graphql_headers(locator),
@@ -44,8 +45,14 @@ defmodule SymphonyElixir.GitHubProject.Client do
     base = %{query: query, variables: variables}
 
     case operation_name do
-      name when is_binary(name) and String.trim(name) != "" ->
-        Map.put(base, :operationName, String.trim(name))
+      name when is_binary(name) ->
+        trimmed = String.trim(name)
+
+        if trimmed == "" do
+          base
+        else
+          Map.put(base, :operationName, trimmed)
+        end
 
       _ ->
         base
@@ -69,21 +76,15 @@ defmodule SymphonyElixir.GitHubProject.Client do
 
   defp graphql_headers(_locator), do: {:error, :missing_github_project_api_token}
 
-  defp post_graphql_request(endpoint, payload, headers) do
-    Req.post(endpoint,
-      headers: headers,
-      json: payload,
-      connect_options: [timeout: 30_000]
-    )
+  defp post_graphql_request(endpoint, payload, headers, req_options) when is_list(req_options) do
+    base_options = [headers: headers, json: payload, connect_options: [timeout: 30_000]]
+    Req.post(endpoint, Keyword.merge(base_options, req_options))
   end
 
   defp github_error_context(payload, %{body: body}) do
     operation_name = operation_label(payload)
 
-    operation_name <>
-      " body=" <>
-      body
-      |> summarize_error_body()
+    operation_name <> " body=" <> summarize_error_body(body)
   end
 
   defp github_error_context(payload, _response) do
@@ -118,4 +119,3 @@ defmodule SymphonyElixir.GitHubProject.Client do
     end
   end
 end
-

@@ -70,8 +70,7 @@ defmodule SymphonyElixirWeb.GitHubProjectApiController do
   end
 
   defp map_error(:missing_github_project_api_token) do
-    {400, "missing_github_project_api_token",
-     "Missing GitHub token (set github_project.api_key or GITHUB_TOKEN)"}
+    {400, "missing_github_project_api_token", "Missing GitHub token (set github_project.api_key or GITHUB_TOKEN)"}
   end
 
   defp map_error(:missing_github_project_owner) do
@@ -79,8 +78,7 @@ defmodule SymphonyElixirWeb.GitHubProjectApiController do
   end
 
   defp map_error(:missing_github_project_owner_type) do
-    {400, "missing_github_project_owner_type",
-     "Missing github_project.owner_type in WORKFLOW.md (organization|user)"}
+    {400, "missing_github_project_owner_type", "Missing github_project.owner_type in WORKFLOW.md (organization|user)"}
   end
 
   defp map_error(:missing_github_project_number) do
@@ -88,17 +86,11 @@ defmodule SymphonyElixirWeb.GitHubProjectApiController do
   end
 
   defp map_error({:invalid_github_project_owner_type, owner_type}) do
-    {400, "invalid_github_project_owner_type",
-     "Invalid github_project.owner_type: #{inspect(owner_type)}"}
+    {400, "invalid_github_project_owner_type", "Invalid github_project.owner_type: #{inspect(owner_type)}"}
   end
 
   defp map_error({:invalid_github_project_number, project_number}) do
-    {400, "invalid_github_project_number",
-     "Invalid github_project.project_number: #{inspect(project_number)}"}
-  end
-
-  defp map_error(:invalid_github_project_locator) do
-    {400, "invalid_github_project_locator", "Invalid github_project configuration"}
+    {400, "invalid_github_project_number", "Invalid github_project.project_number: #{inspect(project_number)}"}
   end
 
   defp map_error(:github_project_not_found) do
@@ -133,11 +125,10 @@ defmodule SymphonyElixirWeb.GitHubProjectApiController do
   defp summarize_graphql_errors(errors) do
     errors
     |> Enum.take(1)
-    |> Enum.map(fn
+    |> Enum.map_join("; ", fn
       %{"message" => message} when is_binary(message) -> message
       %{message: message} -> to_string(message)
       other -> inspect(other)
     end)
-    |> Enum.join("; ")
   end
 end

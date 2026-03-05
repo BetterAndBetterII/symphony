@@ -36,6 +36,13 @@ Note: Elixir `mix` 1.19 uses TCP sockets for `Mix.Sync.Lock` and `Mix.Sync.PubSu
 sandboxes that deny socket creation, `mix` commands (including `mix test` and `make all`) can fail with
 `:eperm` before compilation starts.
 
+Note: If Hex's global cache is corrupted (for example `Error opening ETS file ~/.hex/cache.ets: :badfile`),
+run commands with an isolated home:
+
+```bash
+HEX_HOME=$PWD/.hex MIX_HOME=$PWD/.mix make all
+```
+
 ## Required Rules
 
 - Public functions (`def`) in `lib/` must have an adjacent `@spec`.

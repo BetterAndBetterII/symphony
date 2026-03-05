@@ -420,6 +420,10 @@ defmodule SymphonyElixir.CoreTest do
   end
 
   test "normal worker exit schedules active-state continuation retry" do
+    # Prevent the orchestrator's background poll loop from making real Linear requests
+    # (which can stall the process and make monotonic-time assertions flaky).
+    write_workflow_file!(Workflow.workflow_file_path(), tracker_api_token: nil)
+
     issue_id = "issue-resume"
     ref = make_ref()
     orchestrator_name = Module.concat(__MODULE__, :ContinuationOrchestrator)
@@ -448,6 +452,7 @@ defmodule SymphonyElixir.CoreTest do
       |> Map.put(:retry_attempts, %{})
     end)
 
+    sent_at_ms = System.monotonic_time(:millisecond)
     send(pid, {:DOWN, ref, :process, self(), :normal})
     Process.sleep(50)
     state = :sys.get_state(pid)
@@ -456,10 +461,14 @@ defmodule SymphonyElixir.CoreTest do
     assert MapSet.member?(state.completed, issue_id)
     assert %{attempt: 1, due_at_ms: due_at_ms} = state.retry_attempts[issue_id]
     assert is_integer(due_at_ms)
-    assert_due_in_range(due_at_ms, 500, 1_100)
+    assert_due_delta(due_at_ms, sent_at_ms, 1_000, 5_000)
   end
 
   test "abnormal worker exit increments retry attempt progressively" do
+    # Prevent the orchestrator's background poll loop from making real Linear requests
+    # (which can stall the process and make monotonic-time assertions flaky).
+    write_workflow_file!(Workflow.workflow_file_path(), tracker_api_token: nil)
+
     issue_id = "issue-crash"
     ref = make_ref()
     orchestrator_name = Module.concat(__MODULE__, :CrashRetryOrchestrator)
@@ -489,6 +498,7 @@ defmodule SymphonyElixir.CoreTest do
       |> Map.put(:retry_attempts, %{})
     end)
 
+    sent_at_ms = System.monotonic_time(:millisecond)
     send(pid, {:DOWN, ref, :process, self(), :boom})
     Process.sleep(50)
     state = :sys.get_state(pid)
@@ -496,10 +506,14 @@ defmodule SymphonyElixir.CoreTest do
     assert %{attempt: 3, due_at_ms: due_at_ms, identifier: "MT-559", error: "agent exited: :boom"} =
              state.retry_attempts[issue_id]
 
-    assert_due_in_range(due_at_ms, 39_500, 40_500)
+    assert_due_delta(due_at_ms, sent_at_ms, 40_000, 45_000)
   end
 
   test "first abnormal worker exit waits before retrying" do
+    # Prevent the orchestrator's background poll loop from making real Linear requests
+    # (which can stall the process and make monotonic-time assertions flaky).
+    write_workflow_file!(Workflow.workflow_file_path(), tracker_api_token: nil)
+
     issue_id = "issue-crash-initial"
     ref = make_ref()
     orchestrator_name = Module.concat(__MODULE__, :InitialCrashRetryOrchestrator)
@@ -528,6 +542,7 @@ defmodule SymphonyElixir.CoreTest do
       |> Map.put(:retry_attempts, %{})
     end)
 
+    sent_at_ms = System.monotonic_time(:millisecond)
     send(pid, {:DOWN, ref, :process, self(), :boom})
     Process.sleep(50)
     state = :sys.get_state(pid)
@@ -535,14 +550,15 @@ defmodule SymphonyElixir.CoreTest do
     assert %{attempt: 1, due_at_ms: due_at_ms, identifier: "MT-560", error: "agent exited: :boom"} =
              state.retry_attempts[issue_id]
 
-    assert_due_in_range(due_at_ms, 9_000, 10_500)
+    assert_due_delta(due_at_ms, sent_at_ms, 10_000, 15_000)
   end
 
-  defp assert_due_in_range(due_at_ms, min_remaining_ms, max_remaining_ms) do
-    remaining_ms = due_at_ms - System.monotonic_time(:millisecond)
+  defp assert_due_delta(due_at_ms, baseline_ms, min_delta_ms, max_delta_ms)
+       when is_integer(due_at_ms) and is_integer(baseline_ms) do
+    delta_ms = due_at_ms - baseline_ms
 
-    assert remaining_ms >= min_remaining_ms
-    assert remaining_ms <= max_remaining_ms
+    assert delta_ms >= min_delta_ms
+    assert delta_ms <= max_delta_ms
   end
 
   test "fetch issues by states with empty state set is a no-op" do

@@ -48,12 +48,32 @@ defmodule SymphonyElixir.GitHubProjectConfigTest do
                status_field_name: "Status"
              })
 
+    assert {:error, :missing_github_project_owner_type} =
+             ProjectLocator.parse(%{
+               endpoint: "https://api.github.com/graphql",
+               token: "token",
+               owner: "octo-org",
+               owner_type: " ",
+               project_number: 1,
+               status_field_name: "Status"
+             })
+
     assert {:error, {:invalid_github_project_owner_type, "team"}} =
              ProjectLocator.parse(%{
                endpoint: "https://api.github.com/graphql",
                token: "token",
                owner: "octo-org",
                owner_type: "team",
+               project_number: 1,
+               status_field_name: "Status"
+             })
+
+    assert {:error, :missing_github_project_owner_type} =
+             ProjectLocator.parse(%{
+               endpoint: "https://api.github.com/graphql",
+               token: "token",
+               owner: "octo-org",
+               owner_type: 123,
                project_number: 1,
                status_field_name: "Status"
              })
@@ -68,6 +88,26 @@ defmodule SymphonyElixir.GitHubProjectConfigTest do
                status_field_name: "Status"
              })
 
+    assert {:error, :missing_github_project_number} =
+             ProjectLocator.parse(%{
+               endpoint: "https://api.github.com/graphql",
+               token: "token",
+               owner: "octo-org",
+               owner_type: "organization",
+               project_number: nil,
+               status_field_name: "Status"
+             })
+
+    assert {:error, {:invalid_github_project_number, [:oops]}} =
+             ProjectLocator.parse(%{
+               endpoint: "https://api.github.com/graphql",
+               token: "token",
+               owner: "octo-org",
+               owner_type: "organization",
+               project_number: [:oops],
+               status_field_name: "Status"
+             })
+
     assert {:ok, locator} =
              ProjectLocator.parse(%{
                endpoint: "https://api.github.com/graphql",
@@ -79,6 +119,54 @@ defmodule SymphonyElixir.GitHubProjectConfigTest do
 
     assert locator.owner_type == :organization
     assert locator.project_number == 1
+    assert locator.status_field_name == "Status"
+
+    assert {:ok, locator} =
+             ProjectLocator.parse(%{
+               endpoint: "https://api.github.com/graphql",
+               token: "token",
+               owner: "octo-org",
+               owner_type: "organization",
+               project_number: 1,
+               status_field_name: "Status"
+             })
+
+    assert locator.project_number == 1
+
+    assert {:ok, locator} =
+             ProjectLocator.parse(%{
+               endpoint: "https://api.github.com/graphql",
+               token: "token",
+               owner: "octo-org",
+               owner_type: "org",
+               project_number: "1"
+             })
+
+    assert locator.owner_type == :organization
+
+    assert {:ok, locator} =
+             ProjectLocator.parse(%{
+               endpoint: "https://api.github.com/graphql",
+               token: "token",
+               owner: "octo-org",
+               owner_type: "user",
+               project_number: "1",
+               status_field_name: " "
+             })
+
+    assert locator.owner_type == :user
+    assert locator.status_field_name == "Status"
+
+    assert {:ok, locator} =
+             ProjectLocator.parse(%{
+               endpoint: "https://api.github.com/graphql",
+               token: "token",
+               owner: "octo-org",
+               owner_type: "organization",
+               project_number: "1",
+               status_field_name: 123
+             })
+
     assert locator.status_field_name == "Status"
 
     assert {:error, :missing_github_project_endpoint} =
@@ -441,6 +529,48 @@ defmodule SymphonyElixir.GitHubProjectConfigTest do
 
     assert log =~ "GitHub GraphQL request failed status=401"
     assert log =~ "unauthorized"
+  end
+
+  test "github graphql client ignores blank operation name" do
+    locator = %ProjectLocator{
+      endpoint: "https://api.github.com/graphql",
+      token: "token",
+      owner: "octo-org",
+      owner_type: :organization,
+      project_number: 1,
+      status_field_name: "Status"
+    }
+
+    request_fun = fn payload, _headers ->
+      send(self(), {:payload, payload})
+      {:ok, %{status: 200, body: %{"data" => %{}}}}
+    end
+
+    assert {:ok, %{"data" => %{}}} =
+             Client.graphql(locator, "query Viewer { viewer { login } }", %{}, operation_name: "  ", request_fun: request_fun)
+
+    assert_receive {:payload, payload}
+    refute Map.has_key?(payload, :operationName)
+  end
+
+  test "github graphql client supports Req.Test plug stubs via req_options when request_fun is omitted" do
+    locator = %ProjectLocator{
+      endpoint: "https://api.github.com/graphql",
+      token: "token",
+      owner: "octo-org",
+      owner_type: :organization,
+      project_number: 1,
+      status_field_name: "Status"
+    }
+
+    stub_name = Module.concat(__MODULE__, :GitHubGraphQLStub)
+
+    Req.Test.stub(stub_name, fn conn ->
+      Req.Test.json(conn, %{"data" => %{"viewer" => %{"login" => "octo"}}})
+    end)
+
+    assert {:ok, %{"data" => %{"viewer" => %{"login" => "octo"}}}} =
+             Client.graphql(locator, "query Viewer { viewer { login } }", %{}, req_options: [plug: {Req.Test, stub_name}])
   end
 
   test "github graphql client includes operation name and truncates long string bodies" do

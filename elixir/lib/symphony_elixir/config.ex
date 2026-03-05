@@ -75,7 +75,8 @@ defmodule SymphonyElixir.Config do
                                  api_key: [type: {:or, [:string, nil]}, default: nil],
                                  owner: [type: {:or, [:string, nil]}, default: nil],
                                  owner_type: [type: {:or, [:string, nil]}, default: nil],
-                                 project_number: [type: {:or, [:pos_integer, nil]}, default: nil],
+                                 # Keep raw-ish so ProjectLocator can surface "invalid" vs "missing".
+                                 project_number: [type: {:or, [:string, nil]}, default: nil],
                                  status_field_name: [
                                    type: :string,
                                    default: @default_github_project_status_field_name
@@ -260,7 +261,7 @@ defmodule SymphonyElixir.Config do
     get_in(validated_workflow_options(), [:github_project, :owner_type])
   end
 
-  @spec github_project_number() :: pos_integer() | nil
+  @spec github_project_number() :: String.t() | nil
   def github_project_number do
     get_in(validated_workflow_options(), [:github_project, :project_number])
   end
@@ -537,7 +538,7 @@ defmodule SymphonyElixir.Config do
     |> put_if_present(:api_key, binary_value(Map.get(section, "api_key"), allow_empty: true))
     |> put_if_present(:owner, scalar_string_value(Map.get(section, "owner")))
     |> put_if_present(:owner_type, scalar_string_value(Map.get(section, "owner_type")))
-    |> put_if_present(:project_number, positive_integer_value(Map.get(section, "project_number")))
+    |> put_if_present(:project_number, scalar_string_value(Map.get(section, "project_number")))
     |> put_if_present(:status_field_name, scalar_string_value(Map.get(section, "status_field_name")))
   end
 

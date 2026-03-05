@@ -579,6 +579,219 @@ defmodule SymphonyElixir.ExtensionsTest do
            }
   end
 
+  test "phoenix github project config api surfaces github_project config errors from WORKFLOW.md" do
+    previous_token = System.get_env("GITHUB_TOKEN")
+    env_token = "test-github-token"
+
+    on_exit(fn -> restore_env("GITHUB_TOKEN", previous_token) end)
+    System.put_env("GITHUB_TOKEN", env_token)
+
+    start_test_endpoint([])
+
+    write_workflow_file!(Workflow.workflow_file_path(),
+      github_project_endpoint: " ",
+      github_project_owner: "octo-org",
+      github_project_owner_type: "organization",
+      github_project_number: 1
+    )
+
+    assert json_response(get(build_conn(), "/api/v1/github_project/config"), 400) ==
+             %{
+               "error" => %{
+                 "code" => "missing_github_project_endpoint",
+                 "message" => "Missing github_project.endpoint in WORKFLOW.md"
+               }
+             }
+
+    write_workflow_file!(Workflow.workflow_file_path(),
+      github_project_owner: nil,
+      github_project_owner_type: "organization",
+      github_project_number: 1
+    )
+
+    assert json_response(get(build_conn(), "/api/v1/github_project/config"), 400) ==
+             %{
+               "error" => %{
+                 "code" => "missing_github_project_owner",
+                 "message" => "Missing github_project.owner in WORKFLOW.md"
+               }
+             }
+
+    write_workflow_file!(Workflow.workflow_file_path(),
+      github_project_owner: "octo-org",
+      github_project_owner_type: nil,
+      github_project_number: 1
+    )
+
+    assert json_response(get(build_conn(), "/api/v1/github_project/config"), 400) ==
+             %{
+               "error" => %{
+                 "code" => "missing_github_project_owner_type",
+                 "message" => "Missing github_project.owner_type in WORKFLOW.md (organization|user)"
+               }
+             }
+
+    write_workflow_file!(Workflow.workflow_file_path(),
+      github_project_owner: "octo-org",
+      github_project_owner_type: "team",
+      github_project_number: 1
+    )
+
+    assert json_response(get(build_conn(), "/api/v1/github_project/config"), 400) ==
+             %{
+               "error" => %{
+                 "code" => "invalid_github_project_owner_type",
+                 "message" => "Invalid github_project.owner_type: \"team\""
+               }
+             }
+
+    write_workflow_file!(Workflow.workflow_file_path(),
+      github_project_owner: "octo-org",
+      github_project_owner_type: "organization",
+      github_project_number: nil
+    )
+
+    assert json_response(get(build_conn(), "/api/v1/github_project/config"), 400) ==
+             %{
+               "error" => %{
+                 "code" => "missing_github_project_number",
+                 "message" => "Missing github_project.project_number in WORKFLOW.md"
+               }
+             }
+
+    write_workflow_file!(Workflow.workflow_file_path(),
+      github_project_owner: "octo-org",
+      github_project_owner_type: "organization",
+      github_project_number: 0
+    )
+
+    assert json_response(get(build_conn(), "/api/v1/github_project/config"), 400) ==
+             %{
+               "error" => %{
+                 "code" => "invalid_github_project_number",
+                 "message" => "Invalid github_project.project_number: \"0\""
+               }
+             }
+  end
+
+  test "phoenix github project config api maps github graphql + decode failures" do
+    previous_token = System.get_env("GITHUB_TOKEN")
+    env_token = "test-github-token"
+
+    on_exit(fn -> restore_env("GITHUB_TOKEN", previous_token) end)
+    System.put_env("GITHUB_TOKEN", env_token)
+
+    write_workflow_file!(Workflow.workflow_file_path(),
+      github_project_owner: "octo-org",
+      github_project_owner_type: "organization",
+      github_project_number: 1
+    )
+
+    body = %{
+      "data" => %{
+        "organization" => %{
+          "projectV2" => %{
+            "id" => "PVT_kwDOAA",
+            "title" => "Roadmap",
+            "fields" => %{
+              "nodes" => [],
+              "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+            }
+          }
+        }
+      }
+    }
+
+    missing_cursor =
+      put_in(body, ["data", "organization", "projectV2", "fields", "pageInfo"], %{
+        "hasNextPage" => true,
+        "endCursor" => nil
+      })
+
+    request_fun = fn _payload, _headers ->
+      case Process.get({__MODULE__, :github_results}) do
+        [result | rest] ->
+          Process.put({__MODULE__, :github_results}, rest)
+          result
+
+        _ ->
+          {:ok, %{status: 200, body: body}}
+      end
+    end
+
+    Process.put({__MODULE__, :github_results}, [
+      {:error, :boom},
+      {:ok, %{status: 200, body: %{"errors" => [%{"message" => "bad request"}]}}},
+      {:ok, %{status: 200, body: %{"errors" => [%{message: :oops}]}}},
+      {:ok, %{status: 200, body: %{"errors" => [123]}}},
+      {:ok, %{status: 200, body: %{"errors" => "boom"}}},
+      {:ok, %{status: 200, body: "oops"}},
+      {:ok, %{status: 200, body: missing_cursor}},
+      {:ok, %{status: 200, body: %{"data" => %{"organization" => nil}}}}
+    ])
+
+    start_test_endpoint(github_project_request_fun: request_fun)
+
+    assert json_response(get(build_conn(), "/api/v1/github_project/config"), 502) ==
+             %{
+               "error" => %{
+                 "code" => "github_api_request",
+                 "message" => "GitHub API request failed: :boom"
+               }
+             }
+
+    assert json_response(get(build_conn(), "/api/v1/github_project/config"), 502) ==
+             %{
+               "error" => %{
+                 "code" => "github_graphql_errors",
+                 "message" => "GitHub GraphQL errors returned: bad request"
+               }
+             }
+
+    assert json_response(get(build_conn(), "/api/v1/github_project/config"), 502) ==
+             %{
+               "error" => %{
+                 "code" => "github_graphql_errors",
+                 "message" => "GitHub GraphQL errors returned: oops"
+               }
+             }
+
+    assert json_response(get(build_conn(), "/api/v1/github_project/config"), 502) ==
+             %{
+               "error" => %{
+                 "code" => "github_graphql_errors",
+                 "message" => "GitHub GraphQL errors returned: 123"
+               }
+             }
+
+    internal_error_payload = json_response(get(build_conn(), "/api/v1/github_project/config"), 500)
+    assert internal_error_payload["error"]["code"] == "internal_error"
+
+    assert json_response(get(build_conn(), "/api/v1/github_project/config"), 502) ==
+             %{
+               "error" => %{
+                 "code" => "github_unknown_payload",
+                 "message" => "Unexpected GitHub response payload"
+               }
+             }
+
+    assert json_response(get(build_conn(), "/api/v1/github_project/config"), 502) ==
+             %{
+               "error" => %{
+                 "code" => "github_missing_end_cursor",
+                 "message" => "GitHub response pagination cursor was missing"
+               }
+             }
+
+    assert json_response(get(build_conn(), "/api/v1/github_project/config"), 404) ==
+             %{
+               "error" => %{
+                 "code" => "github_project_not_found",
+                 "message" => "GitHub Project not found"
+               }
+             }
+  end
+
   test "phoenix observability api preserves snapshot timeout behavior" do
     timeout_orchestrator = Module.concat(__MODULE__, :TimeoutOrchestrator)
     {:ok, _pid} = SlowOrchestrator.start_link(name: timeout_orchestrator)

@@ -85,7 +85,7 @@ defmodule SymphonyElixir.GitHubProject.ProjectConfig do
         }
 
   @spec fetch(ProjectLocator.t(), keyword()) :: {:ok, t()} | {:error, term()}
-  def fetch(%ProjectLocator{} = locator, opts \\ []) do
+  def fetch(%ProjectLocator{} = locator, opts) when is_list(opts) do
     with {:ok, meta, fields} <- fetch_all_fields(locator, opts) do
       status_field = find_field_by_name(fields, locator.status_field_name)
 
@@ -101,7 +101,7 @@ defmodule SymphonyElixir.GitHubProject.ProjectConfig do
   end
 
   @spec fetch_from_workflow(keyword()) :: {:ok, t()} | {:error, term()}
-  def fetch_from_workflow(opts \\ []) do
+  def fetch_from_workflow(opts) when is_list(opts) do
     with {:ok, locator} <- Config.github_project_locator() do
       fetch(locator, opts)
     end

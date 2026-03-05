@@ -15,4 +15,3 @@ defmodule SymphonyElixir.GitHubProject.Field do
           options: [option()]
         }
 end
-
