@@ -20,10 +20,13 @@ description:
    - Ensure the current branch is the one to receive the merge.
 4. Fetch latest refs:
    - `git fetch origin`
-5. Sync the remote feature branch first:
-   - `git pull --ff-only origin $(git branch --show-current)`
-   - This pulls branch updates made remotely (for example, a GitHub auto-commit)
-     before merging `origin/main`.
+5. Sync the remote feature branch first (if it exists on origin):
+   - If the branch has already been pushed:
+     - `git pull --ff-only origin $(git branch --show-current)`
+     - This pulls branch updates made remotely (for example, a GitHub auto-commit)
+       before merging `origin/main`.
+   - If the branch is new/local-only (no remote ref yet), skip this step and
+     continue to merging `origin/main`.
 6. Merge in order:
    - Prefer `git -c merge.conflictstyle=zdiff3 merge origin/main` for clearer
      conflict context.
