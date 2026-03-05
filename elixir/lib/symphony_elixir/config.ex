@@ -805,36 +805,45 @@ defmodule SymphonyElixir.Config do
 
   defp parse_integer(_value), do: :error
 
-  defp parse_integer_string(value, depth) when is_binary(value) and depth < 5 do
-    if value == "" do
-      :error
-    else
-      case env_reference_name(value) do
-        {:ok, env_name} ->
-          case resolve_env_token(env_name) do
-            :missing ->
-              :error
+  defp parse_integer_string(_value, depth) when depth >= 5, do: :error
+  defp parse_integer_string("", _depth), do: :error
 
-            env_value when is_binary(env_value) ->
-              env_trimmed = String.trim(env_value)
+  defp parse_integer_string(value, depth) when is_binary(value) do
+    case env_reference_name(value) do
+      {:ok, env_name} ->
+        parse_integer_env_reference(value, env_name, depth)
 
-              cond do
-                env_trimmed == "" -> :error
-                env_trimmed == value -> :error
-                true -> parse_integer_string(env_trimmed, depth + 1)
-              end
-          end
-
-        :error ->
-          case Integer.parse(value) do
-            {parsed, _} -> {:ok, parsed}
-            :error -> :error
-          end
-      end
+      :error ->
+        parse_integer_literal(value)
     end
   end
 
-  defp parse_integer_string(_value, _depth), do: :error
+  defp parse_integer_env_reference(original_value, env_name, depth) do
+    case resolve_env_token(env_name) do
+      :missing ->
+        :error
+
+      env_value when is_binary(env_value) ->
+        parse_integer_env_value(original_value, env_value, depth)
+    end
+  end
+
+  defp parse_integer_env_value(original_value, env_value, depth) do
+    env_trimmed = String.trim(env_value)
+
+    case env_trimmed do
+      "" -> :error
+      ^original_value -> :error
+      _ -> parse_integer_string(env_trimmed, depth + 1)
+    end
+  end
+
+  defp parse_integer_literal(value) do
+    case Integer.parse(value) do
+      {parsed, _rest} -> {:ok, parsed}
+      :error -> :error
+    end
+  end
 
   defp parse_positive_integer(value) do
     case parse_integer(value) do
