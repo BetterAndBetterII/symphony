@@ -166,7 +166,7 @@ defmodule SymphonyElixir.CoreTest do
 
     hooks = Map.get(config, "hooks", %{})
     assert is_map(hooks)
-    assert Map.get(hooks, "after_create") =~ "git clone --depth 1 https://github.com/openai/symphony ."
+    assert Map.get(hooks, "after_create") =~ "git clone --depth 1 git@github.com:BetterAndBetterII/symphony.git ."
     assert Map.get(hooks, "after_create") =~ "cd elixir && mise trust"
     assert Map.get(hooks, "after_create") =~ "mise exec -- mix deps.get"
     assert Map.get(hooks, "before_remove") =~ "cd elixir && mise exec -- mix workspace.before_remove"
@@ -831,19 +831,19 @@ defmodule SymphonyElixir.CoreTest do
 
     prompt = PromptBuilder.build_prompt(issue, attempt: 2)
 
-    assert prompt =~ "You are working on a GitHub issue tracked via GitHub Projects `MT-616`"
-    assert prompt =~ "Issue context:"
-    assert prompt =~ "Identifier: MT-616"
-    assert prompt =~ "Title: Use rich templates for WORKFLOW.md"
-    assert prompt =~ "Current status: In Progress"
+    assert prompt =~ "你正在处理一个由 GitHub Projects 跟踪的 GitHub 工单 `MT-616`"
+    assert prompt =~ "工单信息："
+    assert prompt =~ "编号: MT-616"
+    assert prompt =~ "标题: Use rich templates for WORKFLOW.md"
+    assert prompt =~ "当前状态: In Progress"
     assert prompt =~ "https://example.org/issues/MT-616/use-rich-templates-for-workflowmd"
-    assert prompt =~ "This is an unattended orchestration session."
-    assert prompt =~ "Only stop early for a true blocker"
-    assert prompt =~ "Do not include \"next steps for user\""
-    assert prompt =~ "open and follow `.codex/skills/land/SKILL.md`"
-    assert prompt =~ "Do not call `gh pr merge` directly"
-    assert prompt =~ "Continuation context:"
-    assert prompt =~ "retry attempt #2"
+    assert prompt =~ "这是一个无人值守的编排会话。"
+    assert prompt =~ "只有在真正阻塞（缺少必需的鉴权/权限/密钥）时才可以提前停止"
+    assert prompt =~ "不要包含“用户下一步”"
+    assert prompt =~ "打开并遵循 `.codex/skills/land/SKILL.md`"
+    assert prompt =~ "不要直接调用 `gh pr merge`"
+    assert prompt =~ "续跑上下文："
+    assert prompt =~ "这是第 #2 次重试"
   end
 
   test "prompt builder adds continuation guidance for retries" do
