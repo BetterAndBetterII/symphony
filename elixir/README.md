@@ -158,7 +158,8 @@ codex:
 
 - If `WORKFLOW.md` is missing or has invalid YAML, startup and scheduling are halted until fixed.
 - `server.port` or CLI `--port` enables the optional Phoenix LiveView dashboard and JSON API at
-  `/`, `/api/v1/state`, `/api/v1/<issue_identifier>`, and `/api/v1/refresh`.
+  `/`, `/api/v1/state`, `/api/v1/<issue_identifier>`, `/api/v1/refresh`, and
+  `/api/v1/github_project/config`.
 
 ## Web dashboard
 
@@ -168,6 +169,9 @@ The observability UI now runs on a minimal Phoenix stack:
 - JSON API for operational debugging under `/api/v1/*`
 - Bandit as the HTTP server
 - Phoenix dependency static assets for the LiveView client bootstrap
+
+When `github_project` is configured in `WORKFLOW.md`, Symphony also exposes
+`GET /api/v1/github_project/config` for fetching the latest normalized ProjectV2 field metadata.
 
 ## Project Layout
 

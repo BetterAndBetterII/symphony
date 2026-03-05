@@ -454,6 +454,131 @@ defmodule SymphonyElixir.ExtensionsTest do
              }
   end
 
+  test "phoenix github project config api returns normalized project config" do
+    previous_token = System.get_env("GITHUB_TOKEN")
+    env_token = "test-github-token"
+
+    on_exit(fn -> restore_env("GITHUB_TOKEN", previous_token) end)
+    System.put_env("GITHUB_TOKEN", env_token)
+
+    write_workflow_file!(Workflow.workflow_file_path(),
+      github_project_owner: "octo-org",
+      github_project_owner_type: "organization",
+      github_project_number: 1
+    )
+
+    body = %{
+      "data" => %{
+        "organization" => %{
+          "projectV2" => %{
+            "id" => "PVT_kwDOAA",
+            "title" => "Roadmap",
+            "fields" => %{
+              "nodes" => [
+                %{
+                  "__typename" => "ProjectV2SingleSelectField",
+                  "id" => "F_status",
+                  "name" => "Status",
+                  "dataType" => "SINGLE_SELECT",
+                  "options" => [%{"id" => "O_todo", "name" => "Todo"}]
+                },
+                %{
+                  "__typename" => "ProjectV2Field",
+                  "id" => "F_text",
+                  "name" => "Notes",
+                  "dataType" => "TEXT"
+                }
+              ],
+              "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+            }
+          }
+        }
+      }
+    }
+
+    request_fun = fn _payload, _headers -> {:ok, %{status: 200, body: body}} end
+    start_test_endpoint(github_project_request_fun: request_fun)
+
+    assert json_response(get(build_conn(), "/api/v1/github_project/config"), 200) == %{
+             "project_id" => "PVT_kwDOAA",
+             "project_title" => "Roadmap",
+             "project_number" => 1,
+             "status_field" => %{
+               "id" => "F_status",
+               "name" => "Status",
+               "data_type" => "SINGLE_SELECT",
+               "options" => [%{"id" => "O_todo", "name" => "Todo"}]
+             },
+             "fields" => [
+               %{
+                 "id" => "F_status",
+                 "name" => "Status",
+                 "data_type" => "SINGLE_SELECT",
+                 "options" => [%{"id" => "O_todo", "name" => "Todo"}]
+               },
+               %{
+                 "id" => "F_text",
+                 "name" => "Notes",
+                 "data_type" => "TEXT",
+                 "options" => []
+               }
+             ]
+           }
+  end
+
+  test "phoenix github project config api surfaces missing token and method not allowed" do
+    previous_token = System.get_env("GITHUB_TOKEN")
+
+    on_exit(fn -> restore_env("GITHUB_TOKEN", previous_token) end)
+    restore_env("GITHUB_TOKEN", nil)
+
+    write_workflow_file!(Workflow.workflow_file_path(),
+      github_project_owner: "octo-org",
+      github_project_owner_type: "organization",
+      github_project_number: 1
+    )
+
+    start_test_endpoint([])
+
+    assert json_response(get(build_conn(), "/api/v1/github_project/config"), 400) == %{
+             "error" => %{
+               "code" => "missing_github_project_api_token",
+               "message" => "Missing GitHub token (set github_project.api_key or GITHUB_TOKEN)"
+             }
+           }
+
+    assert json_response(post(build_conn(), "/api/v1/github_project/config", %{}), 405) == %{
+             "error" => %{"code" => "method_not_allowed", "message" => "Method not allowed"}
+           }
+  end
+
+  test "phoenix github project config api maps github api failures to 502" do
+    previous_token = System.get_env("GITHUB_TOKEN")
+    env_token = "test-github-token"
+
+    on_exit(fn -> restore_env("GITHUB_TOKEN", previous_token) end)
+    System.put_env("GITHUB_TOKEN", env_token)
+
+    write_workflow_file!(Workflow.workflow_file_path(),
+      github_project_owner: "octo-org",
+      github_project_owner_type: "organization",
+      github_project_number: 1
+    )
+
+    request_fun = fn _payload, _headers ->
+      {:ok, %{status: 401, body: %{"message" => "unauthorized"}}}
+    end
+
+    start_test_endpoint(github_project_request_fun: request_fun)
+
+    assert json_response(get(build_conn(), "/api/v1/github_project/config"), 502) == %{
+             "error" => %{
+               "code" => "github_api_status",
+               "message" => "GitHub API request failed with status 401"
+             }
+           }
+  end
+
   test "phoenix observability api preserves snapshot timeout behavior" do
     timeout_orchestrator = Module.concat(__MODULE__, :TimeoutOrchestrator)
     {:ok, _pid} = SlowOrchestrator.start_link(name: timeout_orchestrator)

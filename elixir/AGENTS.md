@@ -32,6 +32,10 @@ Run targeted tests while iterating, then run full gates before handoff.
 make all
 ```
 
+Note: Elixir `mix` 1.19 uses TCP sockets for `Mix.Sync.Lock` and `Mix.Sync.PubSub`. In network-restricted
+sandboxes that deny socket creation, `mix` commands (including `mix test` and `make all`) can fail with
+`:eperm` before compilation starts.
+
 ## Required Rules
 
 - Public functions (`def`) in `lib/` must have an adjacent `@spec`.
