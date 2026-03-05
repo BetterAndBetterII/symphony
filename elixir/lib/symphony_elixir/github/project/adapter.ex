@@ -593,8 +593,6 @@ defmodule SymphonyElixir.GitHub.Project.Adapter do
     end
   end
 
-  defp build_assignee_filter(_assignee), do: {:ok, nil}
-
   defp split_assignee_values(values) when is_binary(values) do
     values
     |> String.split(",", trim: true)
@@ -686,8 +684,6 @@ defmodule SymphonyElixir.GitHub.Project.Adapter do
       _ -> {:error, :github_status_field_not_found}
     end
   end
-
-  defp resolve_status_option(_owner, _number, _desired_state), do: {:error, :github_status_option_not_found}
 
   defp find_single_select_field(fields, desired_name) when is_list(fields) and is_binary(desired_name) do
     desired = normalize_state(desired_name)
