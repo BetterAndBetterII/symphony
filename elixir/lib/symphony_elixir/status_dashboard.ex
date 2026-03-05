@@ -390,32 +390,7 @@ defmodule SymphonyElixir.StatusDashboard do
   end
 
   defp format_project_link_lines do
-    project_part =
-      case Config.tracker_kind() do
-        "github_project" ->
-          owner = Config.github_project_owner()
-          number = Config.github_project_number()
-
-          if is_binary(owner) and owner != "" and is_integer(number) do
-            colorize("GitHub Project #{owner}##{number}", @ansi_cyan)
-          else
-            colorize("n/a", @ansi_gray)
-          end
-
-        "linear" ->
-          case Config.linear_project_slug() do
-            project_slug when is_binary(project_slug) and project_slug != "" ->
-              colorize(linear_project_url(project_slug), @ansi_cyan)
-
-            _ ->
-              colorize("n/a", @ansi_gray)
-          end
-
-        _ ->
-          colorize("n/a", @ansi_gray)
-      end
-
-    project_line = colorize("│ Project: ", @ansi_bold) <> project_part
+    project_line = colorize("│ Project: ", @ansi_bold) <> project_part()
 
     case dashboard_url() do
       url when is_binary(url) ->
@@ -424,6 +399,39 @@ defmodule SymphonyElixir.StatusDashboard do
       _ ->
         [project_line]
     end
+  end
+
+  defp project_part do
+    case Config.tracker_kind() do
+      "github_project" -> github_project_part()
+      "linear" -> linear_project_part()
+      _ -> na_project_part()
+    end
+  end
+
+  defp github_project_part do
+    owner = Config.github_project_owner()
+    number = Config.github_project_number()
+
+    if is_binary(owner) and owner != "" and is_integer(number) do
+      colorize("GitHub Project #{owner}##{number}", @ansi_cyan)
+    else
+      na_project_part()
+    end
+  end
+
+  defp linear_project_part do
+    case Config.linear_project_slug() do
+      project_slug when is_binary(project_slug) and project_slug != "" ->
+        colorize(linear_project_url(project_slug), @ansi_cyan)
+
+      _ ->
+        na_project_part()
+    end
+  end
+
+  defp na_project_part do
+    colorize("n/a", @ansi_gray)
   end
 
   defp format_project_refresh_line(%{checking?: true}) do

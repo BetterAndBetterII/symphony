@@ -49,57 +49,55 @@ defmodule SymphonyElixir.GitHub.Project.AdapterTest do
     Process.put({FakeGitHubClient, :responder}, fn query, variables ->
       send(self(), {:graphql_called, query, variables})
 
-      cond do
-        String.contains?(query, "SymphonyGitHubProjectItems(") ->
-          {:ok,
-           %{
-             "data" => %{
-               "repositoryOwner" => %{
-                 "__typename" => "Organization",
-                 "projectV2" => %{
-                   "id" => "proj_1",
-                   "items" => %{
-                     "nodes" => [
-                       %{
-                         "id" => "item_1",
-                         "fieldValues" => %{
-                           "nodes" => [
-                             %{
-                               "__typename" => "ProjectV2ItemFieldSingleSelectValue",
-                               "name" => "Todo",
-                               "optionId" => "opt_todo",
-                               "field" => %{
-                                 "__typename" => "ProjectV2SingleSelectField",
-                                 "id" => "fld_status",
-                                 "name" => "Status"
-                               }
+      if String.contains?(query, "SymphonyGitHubProjectItems(") do
+        {:ok,
+         %{
+           "data" => %{
+             "repositoryOwner" => %{
+               "__typename" => "Organization",
+               "projectV2" => %{
+                 "id" => "proj_1",
+                 "items" => %{
+                   "nodes" => [
+                     %{
+                       "id" => "item_1",
+                       "fieldValues" => %{
+                         "nodes" => [
+                           %{
+                             "__typename" => "ProjectV2ItemFieldSingleSelectValue",
+                             "name" => "Todo",
+                             "optionId" => "opt_todo",
+                             "field" => %{
+                               "__typename" => "ProjectV2SingleSelectField",
+                               "id" => "fld_status",
+                               "name" => "Status"
                              }
-                           ]
-                         },
-                         "content" => %{
-                           "__typename" => "Issue",
-                           "id" => "issue_node_1",
-                           "number" => 123,
-                           "title" => "Fix the thing",
-                           "body" => "Work details",
-                           "url" => "https://github.com/octo/repo/issues/123",
-                           "createdAt" => "2026-01-01T00:00:00Z",
-                           "updatedAt" => "2026-01-02T00:00:00Z",
-                           "repository" => %{"nameWithOwner" => "octo/repo"},
-                           "labels" => %{"nodes" => [%{"name" => "Bug"}, %{"name" => "Enhancement"}]},
-                           "assignees" => %{"nodes" => [%{"login" => "me"}]}
-                         }
+                           }
+                         ]
+                       },
+                       "content" => %{
+                         "__typename" => "Issue",
+                         "id" => "issue_node_1",
+                         "number" => 123,
+                         "title" => "Fix the thing",
+                         "body" => "Work details",
+                         "url" => "https://github.com/octo/repo/issues/123",
+                         "createdAt" => "2026-01-01T00:00:00Z",
+                         "updatedAt" => "2026-01-02T00:00:00Z",
+                         "repository" => %{"nameWithOwner" => "octo/repo"},
+                         "labels" => %{"nodes" => [%{"name" => "Bug"}, %{"name" => "Enhancement"}]},
+                         "assignees" => %{"nodes" => [%{"login" => "me"}]}
                        }
-                     ],
-                     "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
-                   }
+                     }
+                   ],
+                   "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
                  }
                }
              }
-           }}
-
-        true ->
-          flunk("Unexpected GitHub query: #{inspect(query)}")
+           }
+         }}
+      else
+        flunk("Unexpected GitHub query: #{inspect(query)}")
       end
     end)
 
