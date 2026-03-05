@@ -15,11 +15,13 @@ tracker:
     - Done
 polling:
   interval_ms: 5000
+server:
+  port: 0
 workspace:
   root: "$SYMPHONY_WORKSPACE_ROOT"
 hooks:
   after_create: |
-    git clone --depth 1 https://github.com/openai/symphony .
+    git clone --depth 1 git@github.com:BetterAndBetterII/symphony.git .
     if command -v mise >/dev/null 2>&1; then
       cd elixir && mise trust -y && mise exec -- mix deps.get
     fi
@@ -29,7 +31,7 @@ agent:
   max_concurrent_agents: 10
   max_turns: 20
 codex:
-  command: codex --config shell_environment_policy.inherit=all --config model_reasoning_effort=xhigh --model gpt-5.3-codex app-server
+  command: codex --config shell_environment_policy.inherit=all --config model_reasoning_effort=xhigh --model gpt-5.3-codex --yolo app-server
   approval_policy: never
   thread_sandbox: workspace-write
   turn_sandbox_policy:
