@@ -55,11 +55,11 @@ mise exec -- elixir --version
 ```bash
 git clone https://github.com/openai/symphony
 cd symphony/elixir
-mise trust
+mise trust -y
 mise install
 mise exec -- mix setup
 mise exec -- mix build
-mise exec -- ./bin/symphony ./WORKFLOW.md
+mise exec -- ./bin/symphony --i-understand-that-this-will-be-running-without-the-usual-guardrails ./WORKFLOW.md
 ```
 
 ## Configuration
@@ -90,7 +90,7 @@ tracker:
   project_number: 1
   project_field_status: "Status"
 workspace:
-  root: ~/code/workspaces
+  root: "$SYMPHONY_WORKSPACE_ROOT"
 hooks:
   after_create: |
     git clone git@github.com:your-org/your-repo.git .

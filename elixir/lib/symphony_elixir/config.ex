@@ -238,7 +238,10 @@ defmodule SymphonyElixir.Config do
 
   @spec linear_project_slug() :: String.t() | nil
   def linear_project_slug do
-    get_in(validated_workflow_options(), [:tracker, :project_slug])
+    validated_workflow_options()
+    |> get_in([:tracker, :project_slug])
+    |> resolve_env_value(System.get_env("LINEAR_PROJECT_SLUG"))
+    |> normalize_secret_value()
   end
 
   @spec github_project_owner() :: String.t() | nil

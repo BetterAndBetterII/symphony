@@ -17,13 +17,15 @@ tracker:
     - Done
 polling:
   interval_ms: 5000
+server:
+  port: 0
 workspace:
-  root: ~/code/symphony-workspaces
+  root: "$SYMPHONY_WORKSPACE_ROOT"
 hooks:
   after_create: |
-    git clone --depth 1 https://github.com/openai/symphony .
+    git clone --depth 1 git@github.com:BetterAndBetterII/symphony.git .
     if command -v mise >/dev/null 2>&1; then
-      cd elixir && mise trust && mise exec -- mix deps.get
+      cd elixir && mise trust -y && mise exec -- mix deps.get
     fi
   before_remove: |
     cd elixir && mise exec -- mix workspace.before_remove
@@ -31,11 +33,13 @@ agent:
   max_concurrent_agents: 10
   max_turns: 20
 codex:
-  command: codex --config shell_environment_policy.inherit=all --config model_reasoning_effort=xhigh --model gpt-5.3-codex app-server
+  command: codex --config shell_environment_policy.inherit=all --config model_reasoning_effort=xhigh --model gpt-5.3-codex --yolo app-server
   approval_policy: never
-  thread_sandbox: workspace-write
+  thread_sandbox: danger-full-access
   turn_sandbox_policy:
-    type: workspaceWrite
+    type: dangerFullAccess
+    networkAccess: true
+
 ---
 
 You are working on a GitHub issue tracked via GitHub Projects `{{ issue.identifier }}`
