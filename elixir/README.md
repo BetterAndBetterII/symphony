@@ -53,6 +53,22 @@ mise install
 mise exec -- elixir --version
 ```
 
+## Install (no Elixir/Mix required)
+
+To install a self-contained runtime (built with `mix release`) from GitHub Releases:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/BetterAndBetterII/symphony/main/install.sh | bash
+```
+
+Then run Symphony from any directory:
+
+```bash
+symphony
+```
+
+If `WORKFLOW.md` is missing, Symphony will create a starter template in the current directory.
+
 ## Run
 
 ```bash
@@ -62,7 +78,7 @@ mise trust
 mise install
 mise exec -- mix setup
 mise exec -- mix build
-mise exec -- ./bin/symphony ./WORKFLOW.md
+mise exec -- ./bin/symphony --i-understand-that-this-will-be-running-without-the-usual-guardrails ./WORKFLOW.md
 ```
 
 ## Configuration
@@ -144,7 +160,8 @@ codex:
   command: "$CODEX_BIN app-server --model gpt-5.3-codex"
 ```
 
-- If `WORKFLOW.md` is missing or has invalid YAML, startup and scheduling are halted until fixed.
+- If the default `WORKFLOW.md` is missing, Symphony will create a starter template in the current directory.
+- If `WORKFLOW.md` has invalid YAML, startup and scheduling are halted until fixed.
 - `server.port` or CLI `--port` enables the optional Phoenix LiveView dashboard and JSON API at
   `/`, `/api/v1/state`, `/api/v1/<issue_identifier>`, and `/api/v1/refresh`.
 

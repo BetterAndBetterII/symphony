@@ -1,0 +1,140 @@
+name: release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      should_release: ${{ steps.check.outputs.should_release }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: version
+        name: Extract version from mix.exs
+        run: |
+          set -euo pipefail
+          VERSION="$(
+            python3 - <<'PY'
+            import pathlib, re
+
+            text = pathlib.Path("elixir/mix.exs").read_text(encoding="utf-8")
+            m = re.search(r'version:\\s*\"([^\"]+)\"', text)
+            if not m:
+              raise SystemExit("failed to find `version: \"...\"` in elixir/mix.exs")
+            print(m.group(1))
+            PY
+          )"
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - id: check
+        name: Skip if the release tag already exists
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.version.outputs.tag }}"
+
+          if git show-ref --tags --quiet --verify "refs/tags/${TAG}"; then
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            echo "Tag already exists; skipping release: ${TAG}"
+          else
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: prepare
+    if: needs.prepare.outputs.should_release == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    defaults:
+      run:
+        working-directory: elixir
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up mise tools
+        uses: jdx/mise-action@v3
+        with:
+          install: true
+          cache: true
+          working_directory: elixir
+
+      - name: Cache deps and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            elixir/deps
+            elixir/_build
+          key: ${{ runner.os }}-mix-${{ hashFiles('elixir/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix-
+
+      - name: Build mix release
+        run: |
+          set -euo pipefail
+          mix deps.get
+          MIX_ENV=prod mix release symphony --overwrite
+
+      - name: Package release tarball
+        run: |
+          set -euo pipefail
+          TAG="${{ needs.prepare.outputs.tag }}"
+
+          OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+          ARCH="$(uname -m)"
+
+          case "$ARCH" in
+            x86_64|amd64) ARCH="x86_64" ;;
+            arm64|aarch64) ARCH="arm64" ;;
+          esac
+
+          mkdir -p dist
+          tar -C _build/prod/rel -czf "dist/symphony-${TAG}-${OS}-${ARCH}.tar.gz" symphony
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: symphony-${{ matrix.os }}
+          path: elixir/dist/*.tar.gz
+
+  publish:
+    needs: [prepare, build]
+    if: needs.prepare.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create GitHub Release and upload assets
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          name: ${{ needs.prepare.outputs.tag }}
+          generate_release_notes: true
+          files: dist/*.tar.gz
+          fail_on_unmatched_files: true

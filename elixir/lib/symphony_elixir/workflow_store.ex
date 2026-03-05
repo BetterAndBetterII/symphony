@@ -48,13 +48,41 @@ defmodule SymphonyElixir.WorkflowStore do
 
   @impl true
   def init(_opts) do
-    case load_state(Workflow.workflow_file_path()) do
+    path = Workflow.workflow_file_path()
+
+    case load_state(path) do
       {:ok, state} ->
         schedule_poll()
         {:ok, state}
 
+      {:error, {:missing_workflow_file, ^path, :enoent} = reason} ->
+        maybe_bootstrap_default_workflow(path, reason)
+
       {:error, reason} ->
         {:stop, reason}
+    end
+  end
+
+  defp maybe_bootstrap_default_workflow(path, missing_reason) do
+    if path == Workflow.default_workflow_file_path() do
+      case Workflow.init_default_workflow_file(path) do
+        :ok ->
+          Logger.info("Created default WORKFLOW.md at #{path}")
+
+          case load_state(path) do
+            {:ok, state} ->
+              schedule_poll()
+              {:ok, state}
+
+            {:error, reason} ->
+              {:stop, reason}
+          end
+
+        {:error, reason} ->
+          {:stop, {:failed_to_create_default_workflow_file, path, reason}}
+      end
+    else
+      {:stop, missing_reason}
     end
   end
 

@@ -11,6 +11,7 @@ defmodule SymphonyElixir.CLI do
   @type ensure_started_result :: {:ok, [atom()]} | {:error, term()}
   @type deps :: %{
           file_regular?: (String.t() -> boolean()),
+          init_default_workflow_file: (String.t() -> :ok | {:error, term()}),
           set_workflow_file_path: (String.t() -> :ok | {:error, term()}),
           set_logs_root: (String.t() -> :ok | {:error, term()}),
           set_server_port_override: (non_neg_integer() | nil -> :ok | {:error, term()}),
@@ -55,15 +56,38 @@ defmodule SymphonyElixir.CLI do
   def run(workflow_path, deps) do
     expanded_path = Path.expand(workflow_path)
 
-    if deps.file_regular?.(expanded_path) do
-      :ok = deps.set_workflow_file_path.(expanded_path)
+    case deps.file_regular?.(expanded_path) do
+      true ->
+        start_with_workflow(expanded_path, deps)
 
-      case deps.ensure_all_started.() do
-        {:ok, _started_apps} ->
-          :ok
+      false ->
+        maybe_bootstrap_default_workflow(expanded_path, deps)
+    end
+  end
+
+  defp start_with_workflow(expanded_path, deps) do
+    :ok = deps.set_workflow_file_path.(expanded_path)
+
+    case deps.ensure_all_started.() do
+      {:ok, _started_apps} ->
+        :ok
+
+      {:error, reason} ->
+        {:error, "Failed to start Symphony with workflow #{expanded_path}: #{inspect(reason)}"}
+    end
+  end
+
+  defp maybe_bootstrap_default_workflow(expanded_path, deps) do
+    default_path = Path.expand("WORKFLOW.md")
+
+    if expanded_path == default_path do
+      case deps.init_default_workflow_file.(expanded_path) do
+        :ok ->
+          IO.puts(:stderr, "Created default WORKFLOW.md at #{expanded_path}")
+          start_with_workflow(expanded_path, deps)
 
         {:error, reason} ->
-          {:error, "Failed to start Symphony with workflow #{expanded_path}: #{inspect(reason)}"}
+          {:error, "Failed to create default WORKFLOW.md at #{expanded_path}: #{inspect(reason)}"}
       end
     else
       {:error, "Workflow file not found: #{expanded_path}"}
@@ -79,6 +103,7 @@ defmodule SymphonyElixir.CLI do
   defp runtime_deps do
     %{
       file_regular?: &File.regular?/1,
+      init_default_workflow_file: &SymphonyElixir.Workflow.init_default_workflow_file/1,
       set_workflow_file_path: &SymphonyElixir.Workflow.set_workflow_file_path/1,
       set_logs_root: &set_logs_root/1,
       set_server_port_override: &set_server_port_override/1,

@@ -13,6 +13,10 @@ defmodule SymphonyElixir.CLITest do
         send(parent, :file_checked)
         true
       end,
+      init_default_workflow_file: fn _path ->
+        send(parent, :workflow_bootstrapped)
+        :ok
+      end,
       set_workflow_file_path: fn _path ->
         send(parent, :workflow_set)
         :ok
@@ -38,6 +42,7 @@ defmodule SymphonyElixir.CLITest do
     assert banner =~ @ack_flag
     refute_received :file_checked
     refute_received :workflow_set
+    refute_received :workflow_bootstrapped
     refute_received :logs_root_set
     refute_received :port_set
     refute_received :started
@@ -46,6 +51,7 @@ defmodule SymphonyElixir.CLITest do
   test "defaults to WORKFLOW.md when workflow path is missing" do
     deps = %{
       file_regular?: fn path -> Path.basename(path) == "WORKFLOW.md" end,
+      init_default_workflow_file: fn _path -> raise "unexpected workflow bootstrap" end,
       set_workflow_file_path: fn _path -> :ok end,
       set_logs_root: fn _path -> :ok end,
       set_server_port_override: fn _port -> :ok end,
@@ -65,6 +71,7 @@ defmodule SymphonyElixir.CLITest do
         send(parent, {:workflow_checked, path})
         path == expanded_path
       end,
+      init_default_workflow_file: fn _path -> raise "unexpected workflow bootstrap" end,
       set_workflow_file_path: fn path ->
         send(parent, {:workflow_set, path})
         :ok
@@ -84,6 +91,7 @@ defmodule SymphonyElixir.CLITest do
 
     deps = %{
       file_regular?: fn _path -> true end,
+      init_default_workflow_file: fn _path -> raise "unexpected workflow bootstrap" end,
       set_workflow_file_path: fn _path -> :ok end,
       set_logs_root: fn path ->
         send(parent, {:logs_root, path})
@@ -98,22 +106,56 @@ defmodule SymphonyElixir.CLITest do
     assert expanded_path == Path.expand("tmp/custom-logs")
   end
 
-  test "returns not found when workflow file does not exist" do
+  test "bootstraps the default WORKFLOW.md when missing" do
+    parent = self()
+    expanded_path = Path.expand("WORKFLOW.md")
+
+    deps = %{
+      file_regular?: fn path ->
+        send(parent, {:workflow_checked, path})
+        false
+      end,
+      init_default_workflow_file: fn path ->
+        send(parent, {:workflow_bootstrapped, path})
+        :ok
+      end,
+      set_workflow_file_path: fn path ->
+        send(parent, {:workflow_set, path})
+        :ok
+      end,
+      set_logs_root: fn _path -> :ok end,
+      set_server_port_override: fn _port -> :ok end,
+      ensure_all_started: fn ->
+        send(parent, :started)
+        {:ok, [:symphony_elixir]}
+      end
+    }
+
+    assert :ok = CLI.evaluate([@ack_flag, "WORKFLOW.md"], deps)
+    assert_received {:workflow_checked, ^expanded_path}
+    assert_received {:workflow_bootstrapped, ^expanded_path}
+    assert_received {:workflow_set, ^expanded_path}
+    assert_received :started
+  end
+
+  test "returns not found when non-default workflow file does not exist" do
     deps = %{
       file_regular?: fn _path -> false end,
+      init_default_workflow_file: fn _path -> raise "unexpected workflow bootstrap" end,
       set_workflow_file_path: fn _path -> :ok end,
       set_logs_root: fn _path -> :ok end,
       set_server_port_override: fn _port -> :ok end,
       ensure_all_started: fn -> {:ok, [:symphony_elixir]} end
     }
 
-    assert {:error, message} = CLI.evaluate([@ack_flag, "WORKFLOW.md"], deps)
+    assert {:error, message} = CLI.evaluate([@ack_flag, "tmp/MISSING_WORKFLOW.md"], deps)
     assert message =~ "Workflow file not found:"
   end
 
   test "returns startup error when app cannot start" do
     deps = %{
       file_regular?: fn _path -> true end,
+      init_default_workflow_file: fn _path -> raise "unexpected workflow bootstrap" end,
       set_workflow_file_path: fn _path -> :ok end,
       set_logs_root: fn _path -> :ok end,
       set_server_port_override: fn _port -> :ok end,
@@ -128,6 +170,7 @@ defmodule SymphonyElixir.CLITest do
   test "returns ok when workflow exists and app starts" do
     deps = %{
       file_regular?: fn _path -> true end,
+      init_default_workflow_file: fn _path -> raise "unexpected workflow bootstrap" end,
       set_workflow_file_path: fn _path -> :ok end,
       set_logs_root: fn _path -> :ok end,
       set_server_port_override: fn _port -> :ok end,

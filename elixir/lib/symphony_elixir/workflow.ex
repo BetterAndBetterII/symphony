@@ -7,10 +7,90 @@ defmodule SymphonyElixir.Workflow do
 
   @workflow_file_name "WORKFLOW.md"
 
+  @default_workflow_template """
+  ---
+  # Minimal Symphony WORKFLOW.md template.
+  #
+  # Expected env vars:
+  # - LINEAR_API_KEY
+  # - LINEAR_PROJECT_SLUG
+  # - SOURCE_REPO_URL (optional, used by hooks.after_create below)
+  # - SYMPHONY_WORKSPACE_ROOT (optional)
+  tracker:
+    kind: linear
+    api_key: $LINEAR_API_KEY
+    project_slug: $LINEAR_PROJECT_SLUG
+  polling:
+    interval_ms: 5000
+  workspace:
+    root: $SYMPHONY_WORKSPACE_ROOT
+  hooks:
+    after_create: |
+      # TODO: set SOURCE_REPO_URL to the repository Symphony should work on.
+      # Example:
+      #   export SOURCE_REPO_URL=git@github.com:your-org/your-repo.git
+      git clone --depth 1 "$SOURCE_REPO_URL" .
+  agent:
+    max_concurrent_agents: 10
+    max_turns: 20
+  codex:
+    command: codex app-server
+    approval_policy: never
+    thread_sandbox: workspace-write
+    turn_sandbox_policy:
+      type: workspaceWrite
+  ---
+
+  You are working on a Linear ticket `{{ issue.identifier }}`
+
+  Issue context:
+  Identifier: {{ issue.identifier }}
+  Title: {{ issue.title }}
+
+  Description:
+  {% if issue.description %}
+  {{ issue.description }}
+  {% else %}
+  No description provided.
+  {% endif %}
+  """
+
+  @spec default_workflow_file_path() :: Path.t()
+  def default_workflow_file_path do
+    Path.join(File.cwd!(), @workflow_file_name)
+  end
+
   @spec workflow_file_path() :: Path.t()
   def workflow_file_path do
     Application.get_env(:symphony_elixir, :workflow_file_path) ||
-      Path.join(File.cwd!(), @workflow_file_name)
+      env_workflow_file_path() ||
+      default_workflow_file_path()
+  end
+
+  defp env_workflow_file_path do
+    case System.get_env("SYMPHONY_WORKFLOW_FILE_PATH") do
+      path when is_binary(path) ->
+        case String.trim(path) do
+          "" -> nil
+          trimmed -> Path.expand(trimmed)
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  @spec init_default_workflow_file(Path.t()) :: :ok | {:error, term()}
+  def init_default_workflow_file(path) when is_binary(path) do
+    dir = Path.dirname(path)
+
+    with :ok <- File.mkdir_p(dir),
+         :ok <- File.write(path, @default_workflow_template, [:exclusive]) do
+      :ok
+    else
+      {:error, :eexist} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   @spec set_workflow_file_path(Path.t()) :: :ok

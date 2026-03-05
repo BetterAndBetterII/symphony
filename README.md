@@ -34,6 +34,14 @@ help with the setup:
 > Set up Symphony for my repository based on
 > https://github.com/openai/symphony/blob/main/elixir/README.md
 
+#### Install (no Elixir/Mix required)
+
+If you just want a self-contained binary from GitHub Releases:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/BetterAndBetterII/symphony/main/install.sh | bash
+```
+
 ---
 
 ## License
