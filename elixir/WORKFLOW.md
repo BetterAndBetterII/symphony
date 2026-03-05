@@ -26,7 +26,7 @@ hooks:
       cd elixir && mise trust -y && mise exec -- mix deps.get
     fi
   before_remove: |
-    cd elixir && mise exec -- mix workspace.before_remove
+    cd elixir && mise exec -- mix workspace.before_remove --repo BetterAndBetterII/symphony
 agent:
   max_concurrent_agents: 10
   max_turns: 20
