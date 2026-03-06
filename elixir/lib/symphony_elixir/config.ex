@@ -831,15 +831,16 @@ defmodule SymphonyElixir.Config do
   defp parse_integer(_value), do: :error
 
   defp parse_integer_string(value, depth) when is_binary(value) and depth < 5 do
-    case value do
-      "" -> :error
-      _ -> parse_integer_value(value, depth)
-    end
+    value
+    |> String.trim()
+    |> parse_integer_token(depth)
   end
 
   defp parse_integer_string(_value, _depth), do: :error
 
-  defp parse_integer_value(value, depth) do
+  defp parse_integer_token("", _depth), do: :error
+
+  defp parse_integer_token(value, depth) do
     case env_reference_name(value) do
       {:ok, env_name} -> parse_integer_env_reference(env_name, value, depth)
       :error -> parse_integer_literal(value)

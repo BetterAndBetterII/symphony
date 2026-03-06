@@ -42,7 +42,7 @@ Symphony stops the active agent for that issue and cleans up matching workspaces
    - Configure the Project field used as "status" (default: `Status`).
    - Ensure the Project field values match your expected states (for example: `Todo`, `In Progress`,
      `In Review`, `Merging`, `Done`, `Rework`).
-6. Follow the instructions below to install the required runtime dependencies and start the service.
+6. Either install the packaged release (no Elixir/Mix required on the target host) or use the source workflow below for local development.
 
 ## Prerequisites
 
@@ -53,16 +53,33 @@ mise install
 mise exec -- elixir --version
 ```
 
-## Run
+## Install packaged release
+
+For Linux x86_64 hosts, install the latest release into your user profile without Elixir or Mix:
 
 ```bash
-git clone https://github.com/openai/symphony
+curl -fsSL https://raw.githubusercontent.com/BetterAndBetterII/symphony/main/scripts/install.sh | sh
+```
+
+To install a specific version instead of the latest release:
+
+```bash
+SYMPHONY_VERSION=0.1.0 curl -fsSL https://raw.githubusercontent.com/BetterAndBetterII/symphony/main/scripts/install.sh | sh
+```
+
+The installer places the user-facing `symphony` command in `${XDG_BIN_HOME:-$HOME/.local/bin}` and
+keeps the versioned runtime payload under `${XDG_DATA_HOME:-$HOME/.local/share}/symphony/`.
+
+## Run from source
+
+```bash
+git clone https://github.com/BetterAndBetterII/symphony
 cd symphony/elixir
 mise trust -y
 mise install
 mise exec -- mix setup
 mise exec -- mix build
-mise exec -- ./bin/symphony --i-understand-that-this-will-be-running-without-the-usual-guardrails ./WORKFLOW.md
+mise exec -- ./bin/symphony
 ```
 
 ## Configuration
@@ -73,7 +90,7 @@ Pass a custom workflow file path to `./bin/symphony` when starting the service:
 ./bin/symphony /path/to/custom/WORKFLOW.md
 ```
 
-If no path is passed, Symphony defaults to `./WORKFLOW.md`.
+If no path is passed, Symphony defaults to `./WORKFLOW.md` and creates a default template there when the file is missing. Passing an explicit path still requires that file to exist.
 
 Optional flags:
 
@@ -148,7 +165,7 @@ codex:
   command: "$CODEX_BIN app-server --model gpt-5.3-codex"
 ```
 
-- If `WORKFLOW.md` is missing or has invalid YAML, startup and scheduling are halted until fixed.
+- If the default `./WORKFLOW.md` is missing, Symphony creates a starter template on first run. Missing explicit workflow paths or invalid YAML still halt startup until fixed.
 - `server.port` or CLI `--port` enables the optional Phoenix LiveView dashboard and JSON API at
   `/`, `/api/v1/state`, `/api/v1/<issue_identifier>`, and `/api/v1/refresh`.
 
