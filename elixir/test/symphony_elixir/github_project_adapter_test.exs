@@ -18,10 +18,8 @@ defmodule SymphonyElixir.GitHub.Project.AdapterTest do
 
   setup do
     previous_client = Application.get_env(:symphony_elixir, :github_client_module)
-    previous_token = System.get_env("GITHUB_TOKEN")
 
     Application.put_env(:symphony_elixir, :github_client_module, FakeGitHubClient)
-    System.put_env("GITHUB_TOKEN", "token-123")
 
     on_exit(fn ->
       if is_nil(previous_client) do
@@ -30,7 +28,6 @@ defmodule SymphonyElixir.GitHub.Project.AdapterTest do
         Application.put_env(:symphony_elixir, :github_client_module, previous_client)
       end
 
-      restore_env("GITHUB_TOKEN", previous_token)
       Process.delete({FakeGitHubClient, :responder})
     end)
 
@@ -40,6 +37,7 @@ defmodule SymphonyElixir.GitHub.Project.AdapterTest do
   test "fetch_candidate_issues normalizes ProjectV2 items into tracker issues" do
     write_workflow_file!(Workflow.workflow_file_path(),
       tracker_kind: "github_project",
+      tracker_api_token: "token-123",
       tracker_project_owner: "octo-org",
       tracker_project_number: 1,
       tracker_project_field_status: "Status",
@@ -123,6 +121,7 @@ defmodule SymphonyElixir.GitHub.Project.AdapterTest do
   test "create_comment adds a comment to the underlying GitHub issue content" do
     write_workflow_file!(Workflow.workflow_file_path(),
       tracker_kind: "github_project",
+      tracker_api_token: "token-123",
       tracker_project_owner: "octo-org",
       tracker_project_number: 1
     )
@@ -178,6 +177,7 @@ defmodule SymphonyElixir.GitHub.Project.AdapterTest do
   test "update_issue_state updates the ProjectV2 status field value by item id" do
     write_workflow_file!(Workflow.workflow_file_path(),
       tracker_kind: "github_project",
+      tracker_api_token: "token-123",
       tracker_project_owner: "octo-org",
       tracker_project_number: 1,
       tracker_project_field_status: "Status"

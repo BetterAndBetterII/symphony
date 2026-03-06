@@ -18,9 +18,6 @@ defmodule SymphonyElixir.GitHub.Client do
          {:ok, %{status: 200, body: body}} <- request_fun.(payload, headers) do
       {:ok, body}
     else
-      {:error, :missing_github_api_token} ->
-        {:error, :missing_github_api_token}
-
       {:ok, response} ->
         Logger.error(
           "GitHub GraphQL request failed status=#{response.status}" <>
@@ -30,17 +27,18 @@ defmodule SymphonyElixir.GitHub.Client do
         {:error, {:github_api_status, response.status}}
 
       {:error, reason} ->
-        Logger.error("GitHub GraphQL request failed: #{inspect(reason)}")
-        {:error, {:github_api_request, reason}}
+        if Config.github_auth_error?(reason) do
+          {:error, reason}
+        else
+          Logger.error("GitHub GraphQL request failed: #{inspect(reason)}")
+          {:error, {:github_api_request, reason}}
+        end
     end
   end
 
   defp graphql_headers do
-    case Config.github_api_token() do
-      nil ->
-        {:error, :missing_github_api_token}
-
-      token ->
+    case Config.github_auth() do
+      {:ok, %{token: token}} ->
         {:ok,
          [
            {"Authorization", "Bearer #{token}"},
@@ -48,6 +46,9 @@ defmodule SymphonyElixir.GitHub.Client do
            {"Accept", "application/vnd.github+json"},
            {"User-Agent", "symphony"}
          ]}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 

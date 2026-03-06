@@ -455,7 +455,7 @@ defmodule SymphonyElixir.GitHub.Project.Adapter do
   defp next_page_cursor(_), do: :done
 
   defp project_ref do
-    with true <- is_binary(Config.github_api_token()) || {:error, :missing_github_api_token},
+    with {:ok, _auth} <- Config.github_auth(),
          owner when is_binary(owner) <- Config.github_project_owner() || {:error, :missing_github_project_owner},
          trimmed_owner <- String.trim(owner),
          true <- trimmed_owner != "" || {:error, :missing_github_project_owner},
