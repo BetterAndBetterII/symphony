@@ -5,9 +5,17 @@ defmodule SymphonyElixir.Version do
 
   @spec current() :: String.t()
   def current do
-    case Application.spec(:symphony_elixir, :vsn) do
-      version when is_binary(version) -> version
-      version when is_list(version) -> List.to_string(version)
+    :symphony_elixir
+    |> Application.spec(:vsn)
+    |> normalize()
+  end
+
+  @doc false
+  @spec normalize(term()) :: String.t()
+  def normalize(version) do
+    case version do
+      value when is_binary(value) -> value
+      value when is_list(value) -> List.to_string(value)
       _ -> "dev"
     end
   end

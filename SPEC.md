@@ -1364,9 +1364,9 @@ Inputs to prompt rendering:
 - Render with strict filter checking.
 - Convert issue object keys to strings for template compatibility.
 - Preserve nested arrays/maps (labels, blockers) so templates can iterate.
-- Treat missing or blank `issue.description` values as absent input. The default prompt contract
-  should render a stable placeholder line (`No description provided.`) instead of emitting an empty
-  body block.
+- Treat a `null` `issue.description` value as absent input. The default prompt contract should
+  render a stable placeholder line (`No description provided.`) instead of emitting an empty body
+  block.
 
 ### 12.3 Retry/Continuation Semantics
 
@@ -2641,9 +2641,69 @@ Required behavior:
 - Rollback is low risk: the change is isolated to the optional observability surface plus its
   snapshot contract.
 
-## 21. Empty-Description Tracker Issues
+## 21. Issue 19 Coverage Remediation Plan
 
-### 21.1 Expected Behavior
+### 21.1 Scope
+
+The CI gate currently fails because `make -C elixir coverage` reports `99.49%` total coverage while
+the repository enforces a `100.00%` threshold. The only uncovered module is
+`SymphonyElixir.Version`, whose current tests only exercise the Mix-generated charlist `:vsn`
+shape (`~c"0.3.0"`) returned by `Application.spec(:symphony_elixir, :vsn)` in the test runtime.
+
+Required behavior:
+
+- Keep the runtime contract of `SymphonyElixir.Version.current/0`: it must always return a string.
+- Normalize binary version metadata by returning it unchanged.
+- Normalize charlist version metadata via `List.to_string/1`.
+- Fall back to `"dev"` when the application metadata is missing or not a binary/charlist.
+- Restore the coverage gate without lowering the threshold and without adding production logic that
+  exists only to satisfy tests.
+
+### 21.2 Affected Boundaries
+
+- `Types`: no new external domain types are required; the public version value remains a string.
+- `Config`: no workflow or environment contract changes are expected.
+- `Repo`: no tracker, filesystem, or network repository changes are required.
+- `Service` / `Runtime`: refine `SymphonyElixir.Version` so raw BEAM application metadata is parsed
+  through one deterministic normalization boundary, while `SymphonyElixir.Codex.AppServer`
+  continues to consume only the normalized string.
+- `UI`: no dashboard or HTTP surface changes are expected.
+- `Tests`: add targeted unit coverage for the supported binary, charlist, and fallback metadata
+  shapes plus one smoke assertion that the zero-arity runtime entrypoint still returns a string.
+
+### 21.3 Milestones
+
+1. Isolate the raw-version normalization path in `elixir/lib/symphony_elixir/version.ex` so every
+   supported metadata shape can be exercised deterministically in tests without mutating global app
+   state ad hoc.
+2. Add focused tests under `elixir/test/symphony_elixir/` that cover binary metadata, charlist
+   metadata, unsupported/nil metadata, and the existing runtime entrypoint.
+3. Re-run coverage and the full Elixir gate to prove the module reaches `100.00%` coverage and the
+   repository-level CI command passes unchanged.
+
+### 21.4 Test Plan
+
+- During spec review, run `cd elixir && mix specs.check` after any edits to this specification.
+- After implementation, run `cd elixir && mix test test/symphony_elixir/version_test.exs` to verify
+  every supported version-metadata shape.
+- After implementation, run `make -C elixir coverage` to confirm the strict `100.00%` coverage gate.
+- After implementation, run `make -C elixir all` to verify the full local CI path still passes.
+
+### 21.5 Compatibility, Risks, and Rollback
+
+- `SymphonyElixir.Codex.AppServer` and any future callers must continue receiving a plain string;
+  there is no acceptable behavior change at that call site.
+- The implementation must avoid scattering type checks across callers; raw `:vsn` parsing belongs
+  in `SymphonyElixir.Version` as the single boundary for this metadata.
+- The main risk is introducing a test seam that leaks unnecessary API surface. If an auxiliary
+  function is required for deterministic tests, keep it narrowly scoped and aligned with the real
+  runtime parsing boundary.
+- Rollback is low risk: revert the `Version` refactor and its focused tests without touching
+  workflow, tracker, or release contracts.
+
+## 22. Empty-Description Tracker Issues
+
+### 22.1 Expected Behavior
 
 - Tracker issues with a title but no description are valid inputs.
 - A missing, empty, or whitespace-only tracker body must normalize to `Issue.description = null`.
@@ -2652,7 +2712,7 @@ Required behavior:
   provided.`
 - Agent runs must not fail solely because a tracker issue omitted the description field.
 
-### 21.2 Affected Boundaries
+### 22.2 Affected Boundaries
 
 - `Types`: keep `Issue.description` as `string | null`, with `null` representing both absent and
   blank tracker bodies.
@@ -2665,21 +2725,21 @@ Required behavior:
 - `UI` / observability surfaces may omit missing descriptions, but they must tolerate `null`
   without assuming non-empty text.
 
-### 21.3 Milestones
+### 22.3 Milestones
 
 1. Document the normalization rule for empty tracker descriptions in the core issue model.
 2. Document the default prompt output expected for title-only issues.
 3. Verify targeted tests cover both missing-description prompt rendering and tracker normalization.
 
-### 21.4 Test Plan
+### 22.4 Test Plan
 
 - Run `git diff --check` after updating this specification.
 - Run `cd elixir && mix test test/symphony_elixir/core_test.exs` after any implementation or test
   change that touches prompt fallback behavior.
 - Add or update tracker-adapter tests if any adapter currently preserves whitespace-only
-  descriptions instead of normalizing them to `nil`.
+  descriptions instead of normalizing them to `null`.
 
-### 21.5 Compatibility, Risks, and Rollback
+### 22.5 Compatibility, Risks, and Rollback
 
 - Non-empty issue descriptions are unchanged.
 - Blank-to-`null` normalization may change behavior only for trackers that currently preserve
