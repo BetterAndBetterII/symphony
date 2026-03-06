@@ -22,7 +22,7 @@ A practical GitHub Project setup looks like this:
 ---
 tracker:
   kind: github_project
-  project_owner: BetterAndBetterII
+  project_owner: your-org-or-user
   project_number: 1
   project_field_status: Status
   active_states: [Todo, Spec, In Progress, Rework, Merging]
@@ -30,7 +30,7 @@ workspace:
   root: $SYMPHONY_WORKSPACE_ROOT
 hooks:
   after_create: |
-    git clone --depth 1 git@github.com:BetterAndBetterII/symphony.git .
+    git clone --depth 1 git@github.com:your-org/your-repo.git .
 agent:
   max_concurrent_agents: 4
 codex:
@@ -87,7 +87,7 @@ Automatic fallback environment variables:
 | `tracker.endpoint` | GitHub: `https://api.github.com/graphql`; Linear: `https://api.linear.app/graphql` | no | Override only if you need a custom GraphQL endpoint or proxy. |
 | `tracker.api_key` | fallback env vars above | yes for GitHub/Linear dispatch | Accepts a literal token or `$VAR_NAME`. |
 | `tracker.project_owner` | `GITHUB_PROJECT_OWNER` when unset | yes for GitHub | GitHub Project owner (org or user). |
-| `tracker.project_number` | `GITHUB_PROJECT_NUMBER` when unset | yes for GitHub | GitHub ProjectV2 number. Parsed as a positive integer. |
+| `tracker.project_number` | `GITHUB_PROJECT_NUMBER` when unset | yes for GitHub | GitHub ProjectV2 number. Accepts an integer, a string integer, or a `$VAR_NAME` reference. |
 | `tracker.project_field_status` | `Status` | no | Single-select field used as `issue.state`. |
 | `tracker.assignee` | unset | no | Optional routing filter. GitHub accepts one login, a comma-separated list of logins, or `me`. Linear accepts an assignee id or `me`. |
 | `tracker.project_slug` | `LINEAR_PROJECT_SLUG` when unset | yes for Linear | Deprecated Linear-only project selector. |
