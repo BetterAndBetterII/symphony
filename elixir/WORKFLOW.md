@@ -235,7 +235,7 @@ URL: {{ issue.url }}
 7.  创建或更新 draft PR（方案评审载体）：
     - 如果还没有 PR：创建工作分支，提交 `SPEC.md` 变更，并创建 draft PR（推荐显式打开并遵循 `push` 技能）。
     - 如果已有 draft PR：把 `SPEC.md` 的增量更新推上去，并在 PR/工作台中记录已处理的反馈。
-    - 确保 PR 关联到工单与 GitHub Project 项目（优先用附件（attachment）/link 字段）。
+    - 确保 PR 关联到工单（优先用附件（attachment）/link 字段）。
 8.  达到“Spec 完成门槛”后，将工单移动到 `In Review`，等待人类评审与决策：
     - 人类若给出意见，会把工单移回 `Spec`（继续修订方案/规范）。
     - 人类若认可方案，会把工单移到 `In Progress`（允许开始/继续实现）。
