@@ -2678,11 +2678,11 @@ Required behavior:
 
 ### 21.4 Test Plan
 
-- Run `cd elixir && mix specs.check` after updating this specification.
-- Run `cd elixir && mix test test/symphony_elixir/version_test.exs` after implementation to verify
+- During spec review, run `cd elixir && mix specs.check` after any edits to this specification.
+- After implementation, run `cd elixir && mix test test/symphony_elixir/version_test.exs` to verify
   every supported version-metadata shape.
-- Run `make -C elixir coverage` after implementation to confirm the strict `100.00%` coverage gate.
-- Run `make -C elixir all` after implementation to verify the full local CI path still passes.
+- After implementation, run `make -C elixir coverage` to confirm the strict `100.00%` coverage gate.
+- After implementation, run `make -C elixir all` to verify the full local CI path still passes.
 
 ### 21.5 Compatibility, Risks, and Rollback
 
