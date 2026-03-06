@@ -38,7 +38,7 @@ Symphony stops the active agent for that issue and cleans up matching workspaces
    - The `github` skill expects Symphony's `github_graphql` app-server tool for raw GitHub GraphQL
      operations such as comment editing or project field updates.
 5. Customize the copied `WORKFLOW.md` file for your project.
-   - Configure the GitHub Project owner + number.
+   - Configure the GitHub Project owner + number, or let the first-run guided bootstrap pick/create a project for you when starting without a `WORKFLOW.md`.
    - Configure the Project field used as "status" (default: `Status`).
    - Ensure the Project field values match your expected states (for example: `Todo`, `In Progress`,
      `In Review`, `Merging`, `Done`, `Rework`).
@@ -98,7 +98,7 @@ Pass a custom workflow file path to `./bin/symphony` when starting the service:
 ./bin/symphony --i-understand-that-this-will-be-running-without-the-usual-guardrails /path/to/custom/WORKFLOW.md
 ```
 
-If no path is passed, Symphony defaults to `./WORKFLOW.md` and creates a default template there when the file is missing. Passing an explicit path still requires that file to exist.
+If no path is passed, Symphony defaults to `./WORKFLOW.md`. When that file is missing, interactive terminals offer a guided GitHub Project bootstrap that can pick or create a ProjectV2 board and choose Codex defaults; non-interactive runs still create the baseline template automatically. Passing an explicit path still requires that file to exist.
 
 Optional flags:
 
@@ -180,7 +180,7 @@ codex:
   command: "$CODEX_BIN app-server --model gpt-5.3-codex"
 ```
 
-- If the default `./WORKFLOW.md` is missing, Symphony creates a starter template on first run. Missing explicit workflow paths or invalid YAML still halt startup until fixed.
+- If the default `./WORKFLOW.md` is missing, Symphony now offers a guided GitHub Project bootstrap on interactive TTYs and falls back to the baseline starter template in non-interactive runs. Missing explicit workflow paths or invalid YAML still halt startup until fixed.
 - `server.port` or CLI `--port` enables the optional Phoenix LiveView dashboard and JSON API at
   `/`, `/api/v1/state`, `/api/v1/<issue_identifier>`, and `/api/v1/refresh`.
 
