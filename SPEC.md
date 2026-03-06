@@ -398,7 +398,7 @@ Fields:
 
 Fields:
 
-- `root` (path string or `$VAR`)
+- `root` (path string or `$VAR_NAME`)
   - Default: `<system-temp>/symphony_workspaces`
   - `~` and strings containing path separators are expanded.
   - Bare strings without path separators are preserved as-is (relative roots are allowed but
@@ -563,7 +563,7 @@ Value resolution semantics:
 - If a selected `$VAR_NAME` resolves to an empty string, treat the value as missing.
 - Path fields support:
   - `~` home expansion
-  - `$VAR` expansion for env-backed path values
+  - `$VAR_NAME` expansion for env-backed path values
   - Apply expansion only to values intended to be local filesystem paths; do not rewrite URIs or
     arbitrary shell command strings.
 - Tracker-specific fallback sources when the workflow field itself is unset:
@@ -657,13 +657,13 @@ This section is intentionally redundant so a coding agent can implement the conf
 
 - `tracker.kind`: string, required, supported: `github_project`, `memory` (test/dev), `linear` (deprecated)
 - `tracker.endpoint`: string, defaults to GitHub or Linear GraphQL endpoint based on `tracker.kind`
-- `tracker.api_key`: optional explicit string or `$VAR`; for GitHub, omit it to resolve via
+- `tracker.api_key`: optional explicit string or `$VAR_NAME`; for GitHub, omit it to resolve via
   `gh auth token --hostname <tracker-host>`; for Linear, unset falls back to `LINEAR_API_KEY`
-- `tracker.project_owner`: string or `$VAR`, required when `tracker.kind=github_project`, no ambient fallback
-- `tracker.project_number`: integer/string-or-`$VAR`, required when `tracker.kind=github_project`, no ambient fallback
+- `tracker.project_owner`: string or `$VAR_NAME`, required when `tracker.kind=github_project`, no ambient fallback
+- `tracker.project_number`: integer/string-or-`$VAR_NAME`, required when `tracker.kind=github_project`, no ambient fallback
 - `tracker.project_field_status`: string, default `Status` when `tracker.kind=github_project`
 - `tracker.assignee`: optional routing filter; GitHub fallback envs `GITHUB_ASSIGNEE` / `TRACKER_ASSIGNEE`, Linear fallback envs `LINEAR_ASSIGNEE` / `TRACKER_ASSIGNEE`
-- `tracker.project_slug` (deprecated): string or `$VAR`, required when `tracker.kind=linear`, fallback env `LINEAR_PROJECT_SLUG`
+- `tracker.project_slug` (deprecated): string or `$VAR_NAME`, required when `tracker.kind=linear`, fallback env `LINEAR_PROJECT_SLUG`
 - `tracker.active_states`: list/string, default `Todo, In Progress`
 - `tracker.terminal_states`: list/string, default `Closed, Cancelled, Canceled, Duplicate, Done`
 - `polling.interval_ms`: integer, default `30000`
@@ -1757,7 +1757,7 @@ Recommended additional hardening for ports:
 
 ### 15.3 Secret Handling
 
-- Support `$VAR` indirection in workflow config.
+- Support `$VAR_NAME` indirection in workflow config.
 - When using the `gh` fallback, capture `gh auth token` output in memory only; do not log it or
   persist it to files/comments.
 - When invoking `gh` as the implicit GitHub auth bootstrap, strip inherited `GITHUB_TOKEN` /
@@ -2075,14 +2075,14 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - Front matter non-map returns typed error
 - Config defaults apply when optional values are missing
 - `tracker.kind` validation enforces currently supported kinds (for example `github_project`, `memory`)
-- `tracker.api_key` works (including `$VAR` indirection)
+- `tracker.api_key` works (including `$VAR_NAME` indirection)
 - When `tracker.api_key` is omitted for GitHub, credential resolution shells out to
   `gh auth token --hostname <tracker-host>`
 - GitHub `gh` fallback ignores ambient `GITHUB_TOKEN` / `GH_TOKEN` unless they are referenced
   explicitly via `tracker.api_key`
 - Missing `gh`, missing login, and insufficient-scope cases map to typed errors with actionable
   remediation guidance
-- `$VAR` resolution works for tracker API key and path values
+- `$VAR_NAME` resolution works for tracker API key and path values
 - `~` path expansion works
 - `codex.command` is preserved as a shell command string
 - Per-state concurrency override map normalizes state names and ignores invalid values

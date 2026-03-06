@@ -22,9 +22,9 @@ A practical GitHub Project setup looks like this:
 ---
 tracker:
   kind: github_project
-  project_owner: your-org-or-user
+  project_owner: "your-org-or-user"
   project_number: 1
-  project_field_status: Status
+  project_field_status: "Status"
   active_states: [Todo, Spec, In Progress, Rework, Merging]
 workspace:
   root: $SYMPHONY_WORKSPACE_ROOT
