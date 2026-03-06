@@ -591,9 +591,9 @@ guidance:
 - `github_cli_not_installed`
   - Tell the operator to install `gh`, or to set `tracker.api_key` explicitly for headless runs.
 - `github_cli_not_logged_in`
-  - Tell the operator to run `gh auth login --hostname <tracker-host> --scopes project`.
+  - Tell the operator to run `gh auth login --hostname <tracker-host> --scopes repo,project,read:org`.
 - `github_insufficient_scopes`
-  - Tell the operator to run `gh auth refresh --hostname <tracker-host> --scopes project`.
+  - Tell the operator to run `gh auth refresh --hostname <tracker-host> --scopes repo,project,read:org`.
   - If the target Project owner is an organization or org metadata is queried, include
     `read:org` in the remediation guidance.
 - `missing_github_api_token`
