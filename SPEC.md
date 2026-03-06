@@ -2635,3 +2635,63 @@ Required behavior:
   summary data is present.
 - Rollback is low risk: the change is isolated to the optional observability surface plus its
   snapshot contract.
+
+## 21. Issue 19 Coverage Remediation Plan
+
+### 21.1 Scope
+
+The CI gate currently fails because `make -C elixir coverage` reports `99.49%` total coverage while
+the repository enforces a `100.00%` threshold. The only uncovered module is
+`SymphonyElixir.Version`, whose current tests only exercise the Mix-generated charlist `:vsn`
+shape (`~c"0.3.0"`) returned by `Application.spec(:symphony_elixir, :vsn)` in the test runtime.
+
+Required behavior:
+
+- Keep the runtime contract of `SymphonyElixir.Version.current/0`: it must always return a string.
+- Normalize binary version metadata by returning it unchanged.
+- Normalize charlist version metadata via `List.to_string/1`.
+- Fall back to `"dev"` when the application metadata is missing or not a binary/charlist.
+- Restore the coverage gate without lowering the threshold and without adding production logic that
+  exists only to satisfy tests.
+
+### 21.2 Affected Boundaries
+
+- `Types`: no new external domain types are required; the public version value remains a string.
+- `Config`: no workflow or environment contract changes are expected.
+- `Repo`: no tracker, filesystem, or network repository changes are required.
+- `Service` / `Runtime`: refine `SymphonyElixir.Version` so raw BEAM application metadata is parsed
+  through one deterministic normalization boundary, while `SymphonyElixir.Codex.AppServer`
+  continues to consume only the normalized string.
+- `UI`: no dashboard or HTTP surface changes are expected.
+- `Tests`: add targeted unit coverage for the supported binary, charlist, and fallback metadata
+  shapes plus one smoke assertion that the zero-arity runtime entrypoint still returns a string.
+
+### 21.3 Milestones
+
+1. Isolate the raw-version normalization path in `elixir/lib/symphony_elixir/version.ex` so every
+   supported metadata shape can be exercised deterministically in tests without mutating global app
+   state ad hoc.
+2. Add focused tests under `elixir/test/symphony_elixir/` that cover binary metadata, charlist
+   metadata, unsupported/nil metadata, and the existing runtime entrypoint.
+3. Re-run coverage and the full Elixir gate to prove the module reaches `100.00%` coverage and the
+   repository-level CI command passes unchanged.
+
+### 21.4 Test Plan
+
+- Run `cd elixir && mix specs.check` after updating this specification.
+- Run `cd elixir && mix test test/symphony_elixir/version_test.exs` after implementation to verify
+  every supported version-metadata shape.
+- Run `make -C elixir coverage` after implementation to confirm the strict `100.00%` coverage gate.
+- Run `make -C elixir all` after implementation to verify the full local CI path still passes.
+
+### 21.5 Compatibility, Risks, and Rollback
+
+- `SymphonyElixir.Codex.AppServer` and any future callers must continue receiving a plain string;
+  there is no acceptable behavior change at that call site.
+- The implementation must avoid scattering type checks across callers; raw `:vsn` parsing belongs
+  in `SymphonyElixir.Version` as the single boundary for this metadata.
+- The main risk is introducing a test seam that leaks unnecessary API surface. If an auxiliary
+  function is required for deterministic tests, keep it narrowly scoped and aligned with the real
+  runtime parsing boundary.
+- Rollback is low risk: revert the `Version` refactor and its focused tests without touching
+  workflow, tracker, or release contracts.
