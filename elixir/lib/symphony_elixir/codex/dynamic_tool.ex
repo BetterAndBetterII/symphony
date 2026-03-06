@@ -3,6 +3,7 @@ defmodule SymphonyElixir.Codex.DynamicTool do
   Executes client-side tool calls requested by Codex app-server turns.
   """
 
+  alias SymphonyElixir.Config
   alias SymphonyElixir.GitHub.Client
 
   @github_graphql_tool "github_graphql"
@@ -194,14 +195,6 @@ defmodule SymphonyElixir.Codex.DynamicTool do
     }
   end
 
-  defp tool_error_payload(:missing_github_api_token) do
-    %{
-      "error" => %{
-        "message" => "Symphony is missing GitHub auth. Set `tracker.api_key` in `WORKFLOW.md` or export `GITHUB_TOKEN` / `GH_TOKEN`."
-      }
-    }
-  end
-
   defp tool_error_payload({:github_api_status, status}) do
     %{
       "error" => %{
@@ -220,7 +213,18 @@ defmodule SymphonyElixir.Codex.DynamicTool do
     }
   end
 
+  defp tool_error_payload(reason) when is_atom(reason) or is_tuple(reason) do
+    case Config.github_auth_error_message(reason) do
+      nil -> generic_tool_error_payload(reason)
+      message -> %{"error" => %{"message" => message}}
+    end
+  end
+
   defp tool_error_payload(reason) do
+    generic_tool_error_payload(reason)
+  end
+
+  defp generic_tool_error_payload(reason) do
     %{
       "error" => %{
         "message" => "GitHub GraphQL tool execution failed.",

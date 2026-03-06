@@ -3,31 +3,29 @@ defmodule SymphonyElixir.GitHub.ClientTest do
 
   alias SymphonyElixir.GitHub.Client
 
-  test "graphql returns :missing_github_api_token when token is unset" do
-    previous_github_token = System.get_env("GITHUB_TOKEN")
-    previous_gh_token = System.get_env("GH_TOKEN")
-
-    on_exit(fn ->
-      restore_env("GITHUB_TOKEN", previous_github_token)
-      restore_env("GH_TOKEN", previous_gh_token)
+  test "graphql returns gh auth bootstrap errors without issuing a request" do
+    Application.put_env(:symphony_elixir, :github_cli_command_runner, fn "gh", _args, _opts ->
+      {:ok, ~s({"hosts":{}})}
     end)
 
-    System.delete_env("GITHUB_TOKEN")
-    System.delete_env("GH_TOKEN")
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "github_project",
+      tracker_api_token: nil
+    )
 
-    assert {:error, :missing_github_api_token} =
+    assert {:error, {:github_cli_not_logged_in, "github.com"}} =
              Client.graphql("query Viewer { viewer { login } }", %{},
                request_fun: fn _payload, _headers ->
-                 flunk("request_fun should not be called when auth is missing")
+                 flunk("request_fun should not be called when auth bootstrap fails")
                end
              )
   end
 
   test "graphql forwards payload and returns body on 200" do
-    previous_github_token = System.get_env("GITHUB_TOKEN")
-
-    on_exit(fn -> restore_env("GITHUB_TOKEN", previous_github_token) end)
-    System.put_env("GITHUB_TOKEN", "token-123")
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "github_project",
+      tracker_api_token: "token-123"
+    )
 
     request_fun = fn payload, headers ->
       send(self(), {:request_sent, payload, headers})
@@ -56,30 +54,30 @@ defmodule SymphonyElixir.GitHub.ClientTest do
   end
 
   test "graphql maps non-200 responses to {:github_api_status, status}" do
-    previous_github_token = System.get_env("GITHUB_TOKEN")
-
-    on_exit(fn -> restore_env("GITHUB_TOKEN", previous_github_token) end)
-    System.put_env("GITHUB_TOKEN", "token-123")
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "github_project",
+      tracker_api_token: "token-123"
+    )
 
     assert {:error, {:github_api_status, 503}} =
              Client.graphql("query Viewer { viewer { login } }", %{}, request_fun: fn _payload, _headers -> {:ok, %{status: 503, body: "nope"}} end)
   end
 
   test "graphql maps transport errors to {:github_api_request, reason}" do
-    previous_github_token = System.get_env("GITHUB_TOKEN")
-
-    on_exit(fn -> restore_env("GITHUB_TOKEN", previous_github_token) end)
-    System.put_env("GITHUB_TOKEN", "token-123")
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "github_project",
+      tracker_api_token: "token-123"
+    )
 
     assert {:error, {:github_api_request, :timeout}} =
              Client.graphql("query Viewer { viewer { login } }", %{}, request_fun: fn _payload, _headers -> {:error, :timeout} end)
   end
 
   test "graphql omits operationName when operation_name is blank or non-binary" do
-    previous_github_token = System.get_env("GITHUB_TOKEN")
-
-    on_exit(fn -> restore_env("GITHUB_TOKEN", previous_github_token) end)
-    System.put_env("GITHUB_TOKEN", "token-123")
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "github_project",
+      tracker_api_token: "token-123"
+    )
 
     request_fun = fn payload, _headers ->
       send(self(), {:payload_sent, payload})
@@ -106,10 +104,10 @@ defmodule SymphonyElixir.GitHub.ClientTest do
   end
 
   test "graphql logs operation name and truncates long error bodies" do
-    previous_github_token = System.get_env("GITHUB_TOKEN")
-
-    on_exit(fn -> restore_env("GITHUB_TOKEN", previous_github_token) end)
-    System.put_env("GITHUB_TOKEN", "token-123")
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "github_project",
+      tracker_api_token: "token-123"
+    )
 
     long_body = String.duplicate("x", 1_100)
 
@@ -127,10 +125,10 @@ defmodule SymphonyElixir.GitHub.ClientTest do
   end
 
   test "graphql summarizes non-binary error bodies" do
-    previous_github_token = System.get_env("GITHUB_TOKEN")
-
-    on_exit(fn -> restore_env("GITHUB_TOKEN", previous_github_token) end)
-    System.put_env("GITHUB_TOKEN", "token-123")
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "github_project",
+      tracker_api_token: "token-123"
+    )
 
     log =
       capture_log(fn ->

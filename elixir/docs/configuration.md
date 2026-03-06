@@ -61,18 +61,19 @@ body.
   environment.
 - Legacy `env:VAR_NAME` syntax is not supported.
 - If a `$VAR_NAME` resolves to an empty string, Symphony treats that value as missing.
+- When `tracker.kind: github_project` and `tracker.api_key` is omitted, Symphony resolves GitHub auth with `gh auth token --hostname <tracker-host>`.
+- Ambient `GITHUB_TOKEN` / `GH_TOKEN` values are ignored unless you reference them explicitly as `tracker.api_key: $GITHUB_TOKEN` or `tracker.api_key: $GH_TOKEN`.
+- `tracker.project_owner` / `tracker.project_number` do not have ambient fallback env vars; configure them directly or with explicit `$VAR_NAME` references.
 - `workspace.root` expands `~` and normalizes path-like values.
 - `codex.command` stays a shell command string; any `$VAR_NAME` inside it is expanded later by the
   launched shell, not by Symphony's config loader.
 
-Automatic fallback environment variables:
+Automatic fallback sources:
 
-| Workflow field | Fallback env var(s) |
+| Workflow field | Fallback source |
 | --- | --- |
-| `tracker.api_key` for GitHub | `GITHUB_TOKEN`, `GH_TOKEN` |
+| `tracker.api_key` for GitHub | `gh auth token --hostname <tracker-host>` |
 | `tracker.api_key` for Linear | `LINEAR_API_KEY` |
-| `tracker.project_owner` | `GITHUB_PROJECT_OWNER` |
-| `tracker.project_number` | `GITHUB_PROJECT_NUMBER` |
 | `tracker.project_slug` | `LINEAR_PROJECT_SLUG` |
 | `tracker.assignee` for GitHub | `GITHUB_ASSIGNEE`, `TRACKER_ASSIGNEE` |
 | `tracker.assignee` for Linear | `LINEAR_ASSIGNEE`, `TRACKER_ASSIGNEE` |
@@ -85,9 +86,9 @@ Automatic fallback environment variables:
 | --- | --- | --- | --- |
 | `tracker.kind` | none | yes | Supported values: `github_project`, `memory`, `linear` (deprecated). |
 | `tracker.endpoint` | GitHub: `https://api.github.com/graphql`; Linear: `https://api.linear.app/graphql` | no | Override only if you need a custom GraphQL endpoint or proxy. |
-| `tracker.api_key` | fallback env vars above | yes for GitHub/Linear dispatch | Accepts a literal token or `$VAR_NAME`. |
-| `tracker.project_owner` | `GITHUB_PROJECT_OWNER` when unset | yes for GitHub | GitHub Project owner (org or user). |
-| `tracker.project_number` | `GITHUB_PROJECT_NUMBER` when unset | yes for GitHub | GitHub ProjectV2 number. Accepts an integer, a string integer, or a `$VAR_NAME` reference. |
+| `tracker.api_key` | GitHub: `gh auth token --hostname <tracker-host>`; Linear: `LINEAR_API_KEY` | yes for GitHub/Linear dispatch | Accepts a literal token or `$VAR_NAME`. For GitHub, omit it to reuse the active `gh` login; for headless or CI runs, set an explicit `$GITHUB_TOKEN` / `$GH_TOKEN`. |
+| `tracker.project_owner` | none | yes for GitHub | GitHub Project owner (org or user). Configure directly or with an explicit `$VAR_NAME` reference. |
+| `tracker.project_number` | none | yes for GitHub | GitHub ProjectV2 number. Accepts an integer, a string integer, or a `$VAR_NAME` reference. Configure it directly or with an explicit `$VAR_NAME` reference. |
 | `tracker.project_field_status` | `Status` | no | Single-select field used as `issue.state`. |
 | `tracker.assignee` | unset | no | Optional routing filter. GitHub accepts one login, a comma-separated list of logins, or `me`. Linear accepts an assignee id or `me`. |
 | `tracker.project_slug` | `LINEAR_PROJECT_SLUG` when unset | yes for Linear | Deprecated Linear-only project selector. |
@@ -206,6 +207,7 @@ server:
 - Missing `WORKFLOW.md`, invalid YAML front matter, or non-map front matter blocks startup and new
   dispatches until fixed.
 - Missing GitHub or Linear auth blocks dispatch for those tracker kinds.
+- For GitHub Projects, omitting `tracker.api_key` also requires a working `gh` installation plus a logged-in session with the scopes Symphony needs.
 - Missing GitHub project identity (`project_owner` / `project_number`) or Linear project identity
   (`project_slug`) blocks dispatch.
 - Blank `codex.command` is invalid.

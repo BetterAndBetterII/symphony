@@ -4,6 +4,7 @@ defmodule SymphonyElixir.Config do
   """
 
   alias NimbleOptions
+  alias SymphonyElixir.Config.GitHubAuth
   alias SymphonyElixir.Workflow
 
   @default_active_states ["Todo", "In Progress"]
@@ -226,14 +227,32 @@ defmodule SymphonyElixir.Config do
     |> normalize_secret_value()
   end
 
+  @spec github_auth() :: {:ok, GitHubAuth.t()} | {:error, term()}
+  def github_auth do
+    explicit_token =
+      validated_workflow_options()
+      |> get_in([:tracker, :api_key])
+      |> resolve_env_value(nil)
+      |> normalize_secret_value()
+
+    cond do
+      is_binary(explicit_token) ->
+        {:ok, %GitHubAuth{host: github_cli_host(), source: :explicit_config, token: explicit_token}}
+
+      tracker_kind() == "github_project" ->
+        GitHubAuth.resolve_cli_token(github_cli_host(), runner: github_cli_command_runner())
+
+      true ->
+        {:error, :missing_github_api_token}
+    end
+  end
+
   @spec github_api_token() :: String.t() | nil
   def github_api_token do
-    fallback = System.get_env("GITHUB_TOKEN") || System.get_env("GH_TOKEN")
-
-    validated_workflow_options()
-    |> get_in([:tracker, :api_key])
-    |> resolve_env_value(fallback)
-    |> normalize_secret_value()
+    case github_auth() do
+      {:ok, %GitHubAuth{token: token}} -> token
+      {:error, _reason} -> nil
+    end
   end
 
   @spec linear_project_slug() :: String.t() | nil
@@ -248,7 +267,7 @@ defmodule SymphonyElixir.Config do
   def github_project_owner do
     validated_workflow_options()
     |> get_in([:tracker, :project_owner])
-    |> resolve_env_value(System.get_env("GITHUB_PROJECT_OWNER"))
+    |> resolve_env_value(nil)
     |> normalize_secret_value()
   end
 
@@ -259,11 +278,18 @@ defmodule SymphonyElixir.Config do
         number
 
       _ ->
-        case parse_positive_integer(System.get_env("GITHUB_PROJECT_NUMBER")) do
-          {:ok, parsed} -> parsed
-          :error -> nil
-        end
+        nil
     end
+  end
+
+  @spec github_auth_error?(term()) :: boolean()
+  def github_auth_error?(reason) do
+    GitHubAuth.auth_error?(reason)
+  end
+
+  @spec github_auth_error_message(term()) :: String.t() | nil
+  def github_auth_error_message(reason) do
+    GitHubAuth.error_message(reason, github_cli_host())
   end
 
   @spec github_project_status_field() :: String.t()
@@ -532,10 +558,9 @@ defmodule SymphonyElixir.Config do
   end
 
   defp require_github_token do
-    if is_binary(github_api_token()) do
-      :ok
-    else
-      {:error, :missing_github_api_token}
+    case github_auth() do
+      {:ok, %GitHubAuth{}} -> :ok
+      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -822,22 +847,20 @@ defmodule SymphonyElixir.Config do
     end
   end
 
-  defp parse_integer_env_reference(env_name, value, depth) do
-    case resolve_env_token(env_name) do
-      env_value when is_binary(env_value) -> parse_integer_env_value(env_value, value, depth)
-      :missing -> :error
-    end
-  end
-
-  defp parse_integer_env_value(env_value, original_value, depth) do
-    env_trimmed = String.trim(env_value)
-
-    if env_trimmed in ["", original_value] do
-      :error
-    else
+  defp parse_integer_env_reference(env_name, original_value, depth) do
+    with env_value when is_binary(env_value) <- resolve_env_token(env_name),
+         env_trimmed <- String.trim(env_value),
+         :ok <- validate_integer_env_value(env_trimmed, original_value) do
       parse_integer_string(env_trimmed, depth + 1)
+    else
+      :missing -> :error
+      :error -> :error
     end
   end
+
+  defp validate_integer_env_value("", _original_value), do: :error
+  defp validate_integer_env_value(value, value), do: :error
+  defp validate_integer_env_value(_value, _original_value), do: :ok
 
   defp parse_integer_literal(value) do
     case Integer.parse(value) do
@@ -967,6 +990,18 @@ defmodule SymphonyElixir.Config do
   end
 
   defp normalize_tracker_kind(_kind), do: nil
+
+  defp github_cli_host do
+    case URI.parse(github_endpoint()) do
+      %URI{host: "api.github.com"} -> "github.com"
+      %URI{host: host} when is_binary(host) and host != "" -> host
+      _ -> "github.com"
+    end
+  end
+
+  defp github_cli_command_runner do
+    Application.get_env(:symphony_elixir, :github_cli_command_runner, &GitHubAuth.default_command_runner/3)
+  end
 
   defp workflow_config do
     case current_workflow() do

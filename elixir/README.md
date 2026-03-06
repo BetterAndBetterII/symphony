@@ -30,8 +30,9 @@ Symphony stops the active agent for that issue and cleans up matching workspaces
 
 1. Make sure your codebase is set up to work well with agents: see
    [Harness engineering](https://openai.com/index/harness-engineering/).
-2. Create a GitHub personal access token (PAT) with access to the target Project and repos, and
-   set it as the `GITHUB_TOKEN` (or `GH_TOKEN`) environment variable.
+2. Install GitHub CLI (`gh`) and log in with the scopes Symphony needs:
+   `gh auth login --hostname github.com --scopes repo,project,read:org`.
+   - For headless or CI runs, keep using an explicit token via `tracker.api_key: $GITHUB_TOKEN`.
 3. Copy this directory's `WORKFLOW.md` to your repo.
 4. Optionally copy the `commit`, `push`, `pull`, `land`, and `github` skills to your repo.
    - The `github` skill expects Symphony's `github_graphql` app-server tool for raw GitHub GraphQL
@@ -159,10 +160,13 @@ Important behavior:
 - If a hook needs `mise exec` inside a freshly cloned workspace, trust the repo config and fetch
   the project dependencies in `hooks.after_create` before invoking `mise` later from other hooks.
 - Use `$VAR_NAME` for env-backed values. Legacy `env:VAR_NAME` syntax is not supported.
-- `tracker.api_key` falls back to `GITHUB_TOKEN` or `GH_TOKEN` when unset for GitHub Projects.
-- For path values, `~` is expanded to the home directory. `workspace.root` resolves `$VAR` before
-  path handling, while `codex.command` remains a shell command string and any `$VAR` expansion
-  there happens in the launched shell.
+- When `tracker.kind: github_project` and `tracker.api_key` is omitted, Symphony resolves GitHub auth via `gh auth token --hostname <tracker-host>`.
+- The implicit `GITHUB_TOKEN` / `GH_TOKEN` fallback is no longer used. Keep env-backed auth explicit with `tracker.api_key: $GITHUB_TOKEN` (or `$GH_TOKEN`) when needed.
+- `tracker.project_owner` / `tracker.project_number` should be configured directly in `WORKFLOW.md` or via explicit `$VAR` references; Symphony no longer reads ambient `GITHUB_PROJECT_OWNER` / `GITHUB_PROJECT_NUMBER` automatically.
+- For path values, `~` is expanded to the home directory.
+- For env-backed path values, use `$VAR`. `workspace.root` resolves `$VAR` before path handling,
+  while `codex.command` stays a shell command string and any `$VAR` expansion there happens in the
+  launched shell.
 
 ```yaml
 tracker:
