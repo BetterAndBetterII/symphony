@@ -2069,9 +2069,9 @@ Implementation route:
 
 Validation for this hardening slice:
 
-- `mise exec -- env GITHUB_PROJECT_OWNER=ambient-owner GITHUB_PROJECT_NUMBER=42 GITHUB_ASSIGNEE=ambient-gh TRACKER_ASSIGNEE=ambient-tracker mix test test/symphony_elixir/core_test.exs`
-- `mise exec -- mix test test/symphony_elixir/core_test.exs:873`
-- `mise exec -- mix test test/symphony_elixir/core_test.exs test/symphony_elixir/workspace_and_config_test.exs`
+- mise exec -- env GITHUB_PROJECT_OWNER=ambient-owner GITHUB_PROJECT_NUMBER=42 GITHUB_ASSIGNEE=ambient-gh TRACKER_ASSIGNEE=ambient-tracker mix test test/symphony_elixir/core_test.exs
+- mise exec -- mix test test/symphony_elixir/core_test.exs:894
+- mise exec -- mix test test/symphony_elixir/core_test.exs test/symphony_elixir/workspace_and_config_test.exs
 
 Migration / release considerations:
 
