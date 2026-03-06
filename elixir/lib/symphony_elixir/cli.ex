@@ -10,7 +10,8 @@ defmodule SymphonyElixir.CLI do
   @type ensure_started_result :: {:ok, [atom()]} | {:error, term()}
   @type deps :: %{
           file_regular?: (String.t() -> boolean()),
-          write_default_workflow: (String.t() -> :ok | {:error, term()}),
+          write_default_workflow: (String.t(), keyword() -> :ok | {:error, term()}),
+          interactive_stdio?: (-> boolean()),
           notify: (String.t() -> term()),
           set_workflow_file_path: (String.t() -> :ok | {:error, term()}),
           set_logs_root: (String.t() -> :ok | {:error, term()}),
@@ -76,7 +77,8 @@ defmodule SymphonyElixir.CLI do
   defp runtime_deps do
     %{
       file_regular?: &File.regular?/1,
-      write_default_workflow: &DefaultWorkflow.write/1,
+      write_default_workflow: &DefaultWorkflow.write/2,
+      interactive_stdio?: &interactive_stdio?/0,
       notify: &IO.puts/1,
       set_workflow_file_path: &SymphonyElixir.Workflow.set_workflow_file_path/1,
       set_logs_root: &set_logs_root/1,
@@ -89,13 +91,15 @@ defmodule SymphonyElixir.CLI do
     if deps.file_regular?.(path) do
       :ok
     else
-      case deps.write_default_workflow.(path) do
+      interactive? = deps.interactive_stdio?.()
+
+      case deps.write_default_workflow.(path, interactive: interactive?) do
         :ok ->
           deps.notify.(bootstrap_message(path))
           :ok
 
         {:error, reason} ->
-          {:error, "Failed to initialize workflow file #{path}: #{inspect(reason)}"}
+          format_bootstrap_error(path, reason)
       end
     end
   end
@@ -108,8 +112,14 @@ defmodule SymphonyElixir.CLI do
     end
   end
 
+  defp format_bootstrap_error(_path, reason) when is_binary(reason), do: {:error, reason}
+
+  defp format_bootstrap_error(path, reason) do
+    {:error, "Failed to initialize workflow file #{path}: #{inspect(reason)}"}
+  end
+
   defp bootstrap_message(path) do
-    "Created default WORKFLOW.md at #{path}. Update GITHUB_TOKEN, GITHUB_PROJECT_OWNER, GITHUB_PROJECT_NUMBER, SOURCE_REPO_URL, and SYMPHONY_WORKSPACE_ROOT for your repo."
+    "Created WORKFLOW.md at #{path}. Review the generated tracker, auth, and workspace settings before running Symphony."
   end
 
   defp maybe_set_logs_root(opts, deps) do
@@ -170,6 +180,19 @@ defmodule SymphonyElixir.CLI do
               :normal -> System.halt(0)
               _ -> System.halt(1)
             end
+        end
+    end
+  end
+
+  defp interactive_stdio? do
+    case System.find_executable("sh") do
+      nil ->
+        false
+
+      shell_path ->
+        case System.cmd(shell_path, ["-lc", "test -t 0 && test -t 1"], stderr_to_stdout: true) do
+          {_output, 0} -> true
+          _ -> false
         end
     end
   end

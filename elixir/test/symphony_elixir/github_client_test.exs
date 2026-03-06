@@ -143,4 +143,25 @@ defmodule SymphonyElixir.GitHub.ClientTest do
     assert log =~ "body=%{"
     assert log =~ "errors"
   end
+
+  test "graphql accepts explicit token and endpoint overrides" do
+    request_fun = fn payload, headers ->
+      send(self(), {:request_sent, payload, headers})
+      {:ok, %{status: 200, body: %{"data" => %{"viewer" => %{"login" => "override-user"}}}}}
+    end
+
+    assert {:ok, %{"data" => %{"viewer" => %{"login" => "override-user"}}}} =
+             Client.graphql("query Viewer { viewer { login } }", %{},
+               token: "override-token",
+               endpoint: "https://ghe.example.test/api/graphql",
+               request_fun: request_fun
+             )
+
+    assert_received {:request_sent, %{"query" => "query Viewer { viewer { login } }", "variables" => %{}}, headers}
+
+    assert Enum.any?(headers, fn
+             {"Authorization", "Bearer override-token"} -> true
+             _ -> false
+           end)
+  end
 end

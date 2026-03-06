@@ -2317,6 +2317,10 @@ The generated GitHub-backed `WORKFLOW.md` SHOULD include concrete values for:
 - `codex.approval_policy`: the operator-selected approval policy
 - `codex.thread_sandbox`: the operator-selected thread sandbox mode
 
+`Backlog` should still be provisioned in the ProjectV2 status field for manual triage, but it is
+intentionally excluded from `tracker.active_states` so Symphony does not auto-dispatch backlog work
+until a human moves it into an active state.
+
 The remaining baseline fields (workspace root, hooks, prompt body, polling, and server defaults)
 should stay aligned with the non-interactive template so packaged releases keep one shared runtime
 contract.

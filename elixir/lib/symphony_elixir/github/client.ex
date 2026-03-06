@@ -5,6 +5,7 @@ defmodule SymphonyElixir.GitHub.Client do
 
   require Logger
   alias SymphonyElixir.Config
+  alias SymphonyElixir.Config.GitHubAuth
 
   @max_error_body_log_bytes 1_000
 
@@ -12,9 +13,14 @@ defmodule SymphonyElixir.GitHub.Client do
   def graphql(query, variables \\ %{}, opts \\ [])
       when is_binary(query) and is_map(variables) and is_list(opts) do
     payload = build_graphql_payload(query, variables, Keyword.get(opts, :operation_name))
-    request_fun = Keyword.get(opts, :request_fun, &post_graphql_request/2)
+    endpoint = Keyword.get(opts, :endpoint, Config.github_endpoint())
 
-    with {:ok, headers} <- graphql_headers(),
+    request_fun =
+      Keyword.get(opts, :request_fun, fn request_payload, headers ->
+        post_graphql_request(endpoint, request_payload, headers)
+      end)
+
+    with {:ok, headers} <- graphql_headers(opts),
          {:ok, %{status: 200, body: body}} <- request_fun.(payload, headers) do
       {:ok, body}
     else
@@ -36,9 +42,9 @@ defmodule SymphonyElixir.GitHub.Client do
     end
   end
 
-  defp graphql_headers do
-    case Config.github_auth() do
-      {:ok, %{token: token}} ->
+  defp graphql_headers(opts) do
+    case auth_from_opts(opts) do
+      {:ok, %GitHubAuth{token: token}} ->
         {:ok,
          [
            {"Authorization", "Bearer #{token}"},
@@ -52,8 +58,28 @@ defmodule SymphonyElixir.GitHub.Client do
     end
   end
 
-  defp post_graphql_request(payload, headers) do
-    Req.post(Config.github_endpoint(),
+  defp auth_from_opts(opts) do
+    case Keyword.get(opts, :token) do
+      token when is_binary(token) and token != "" ->
+        {:ok, %GitHubAuth{host: github_host(opts), source: :explicit_config, token: token}}
+
+      _ ->
+        Config.github_auth()
+    end
+  end
+
+  defp github_host(opts) do
+    endpoint = Keyword.get(opts, :endpoint, Config.github_endpoint())
+
+    case URI.parse(endpoint) do
+      %URI{host: "api.github.com"} -> "github.com"
+      %URI{host: host} when is_binary(host) and host != "" -> host
+      _ -> "github.com"
+    end
+  end
+
+  defp post_graphql_request(endpoint, payload, headers) do
+    Req.post(endpoint,
       headers: headers,
       json: payload,
       connect_options: [timeout: 30_000]
@@ -97,7 +123,7 @@ defmodule SymphonyElixir.GitHub.Client do
 
   defp summarize_error_body(body) when is_binary(body) do
     body
-    |> String.replace(~r/\\s+/, " ")
+    |> String.replace(~r/\s+/, " ")
     |> String.trim()
     |> truncate_error_body()
     |> inspect()

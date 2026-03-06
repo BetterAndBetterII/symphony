@@ -18,8 +18,9 @@ On Linux x86_64, install the latest packaged Symphony release into your user pro
 curl -fsSL https://raw.githubusercontent.com/BetterAndBetterII/symphony/main/scripts/install.sh | sh
 ```
 
-After installation, run `symphony` from any project directory. It will create `WORKFLOW.md` when
-missing and then boot the service from that directory.
+After installation, run `symphony` from any project directory. If `WORKFLOW.md` is missing,
+interactive terminals offer a guided GitHub Project bootstrap (with a baseline-template fallback),
+while non-interactive runs still write the baseline template before booting the service.
 
 To pin a specific release, export `SYMPHONY_VERSION` before invoking the installer.
 

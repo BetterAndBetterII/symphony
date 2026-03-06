@@ -1,7 +1,7 @@
 defmodule SymphonyElixir.Config.GitHubAuth do
   @moduledoc false
 
-  @required_scopes ["project", "repo"]
+  @default_required_scopes ["project", "repo"]
 
   @enforce_keys [:host, :source, :token]
   defstruct [:host, :source, :token]
@@ -23,9 +23,10 @@ defmodule SymphonyElixir.Config.GitHubAuth do
   @spec resolve_cli_token(String.t(), keyword()) :: {:ok, t()} | {:error, error_reason()}
   def resolve_cli_token(host, opts \\ []) when is_binary(host) do
     runner = Keyword.get(opts, :runner, &default_command_runner/3)
+    required_scopes = Keyword.get(opts, :required_scopes, @default_required_scopes)
 
     with {:ok, account} <- fetch_active_account(host, runner),
-         :ok <- ensure_required_scopes(host, account),
+         :ok <- ensure_required_scopes(host, account, required_scopes),
          {:ok, token_output} <- run_gh(host, gh_token_args(host), runner),
          {:ok, token} <- parse_token(host, token_output) do
       {:ok, %__MODULE__{host: host, source: :gh_cli, token: token}}
@@ -109,7 +110,7 @@ defmodule SymphonyElixir.Config.GitHubAuth do
     end
   end
 
-  defp ensure_required_scopes(host, account) do
+  defp ensure_required_scopes(host, account, required_scopes) when is_list(required_scopes) do
     available_scopes = parse_scopes(Map.get(account, "scopes"))
 
     case available_scopes do
@@ -120,7 +121,7 @@ defmodule SymphonyElixir.Config.GitHubAuth do
         available_set = MapSet.new(scopes)
 
         missing_scopes =
-          @required_scopes
+          required_scopes
           |> Enum.reject(&MapSet.member?(available_set, &1))
           |> Enum.sort()
 
