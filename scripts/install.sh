@@ -50,6 +50,17 @@ normalize_version() {
   esac
 }
 
+strip_version_prefix() {
+  case "$1" in
+    v*)
+      echo "${1#v}"
+      ;;
+    *)
+      echo "$1"
+      ;;
+  esac
+}
+
 write_wrapper() {
   wrapper_path=$1
 
@@ -120,6 +131,13 @@ package_dir=$(find "$tmp_root" -mindepth 1 -maxdepth 1 -type d | head -n 1)
 
 version=$(cat "$package_dir/VERSION")
 [ -n "$version" ] || fail "release payload VERSION file is empty"
+
+if [ -n "${SYMPHONY_VERSION:-}" ]; then
+  requested_version=$(strip_version_prefix "$SYMPHONY_VERSION")
+  actual_version=$(strip_version_prefix "$version")
+  [ "$requested_version" = "$actual_version" ] ||
+    fail "downloaded payload version ${version} does not match requested version ${SYMPHONY_VERSION}"
+fi
 
 target_dir="$data_root/$version"
 release_bin="$target_dir/release/bin/symphony"

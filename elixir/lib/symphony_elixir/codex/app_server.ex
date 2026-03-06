@@ -203,7 +203,7 @@ defmodule SymphonyElixir.Codex.AppServer do
         "clientInfo" => %{
           "name" => "symphony-orchestrator",
           "title" => "Symphony Orchestrator",
-          "version" => "0.1.0"
+          "version" => SymphonyElixir.Version.current()
         }
       }
     }

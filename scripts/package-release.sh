@@ -32,6 +32,17 @@ normalize_arch() {
   esac
 }
 
+strip_version_prefix() {
+  case "$1" in
+    v*)
+      echo "${1#v}"
+      ;;
+    *)
+      echo "$1"
+      ;;
+  esac
+}
+
 SCRIPT_DIR=$(CDPATH='' cd "$(dirname "$0")" && pwd -P)
 REPO_ROOT=$(CDPATH='' cd "$SCRIPT_DIR/.." && pwd -P)
 ELIXIR_DIR="$REPO_ROOT/elixir"
@@ -54,6 +65,12 @@ arch=$(normalize_arch "$ARCH_INPUT") || fail "unsupported release architecture: 
 
 version=$(sed -n 's/.*version: "\([^"]*\)".*/\1/p' "$ELIXIR_DIR/mix.exs" | head -n 1)
 [ -n "$version" ] || fail "failed to resolve Mix project version"
+
+if [ -n "${SYMPHONY_RELEASE_VERSION:-}" ]; then
+  requested_version=$(strip_version_prefix "$SYMPHONY_RELEASE_VERSION")
+  [ "$requested_version" = "$version" ] ||
+    fail "release version mismatch: requested ${SYMPHONY_RELEASE_VERSION} but elixir/mix.exs is ${version}"
+fi
 
 artifact_root="symphony-v${version}-${os}-${arch}"
 versioned_asset="${artifact_root}.tar.gz"

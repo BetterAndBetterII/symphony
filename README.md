@@ -24,6 +24,11 @@ while non-interactive runs still write the baseline template before booting the 
 
 To pin a specific release, export `SYMPHONY_VERSION` before invoking the installer.
 
+```bash
+export SYMPHONY_VERSION=v0.3.0
+curl -fsSL https://raw.githubusercontent.com/BetterAndBetterII/symphony/main/scripts/install.sh | sh
+```
+
 ## Running Symphony
 
 ### Requirements

@@ -64,7 +64,8 @@ curl -fsSL https://raw.githubusercontent.com/BetterAndBetterII/symphony/main/scr
 To install a specific version instead of the latest release:
 
 ```bash
-SYMPHONY_VERSION=0.1.0 curl -fsSL https://raw.githubusercontent.com/BetterAndBetterII/symphony/main/scripts/install.sh | sh
+export SYMPHONY_VERSION=v0.3.0
+curl -fsSL https://raw.githubusercontent.com/BetterAndBetterII/symphony/main/scripts/install.sh | sh
 ```
 
 The installer places the user-facing `symphony` command in `${XDG_BIN_HOME:-$HOME/.local/bin}` and

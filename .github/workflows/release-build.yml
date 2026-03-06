@@ -31,6 +31,8 @@ jobs:
           mix deps.get
 
       - name: Package release artifacts
+        env:
+          SYMPHONY_RELEASE_VERSION: ${{ github.ref_name }}
         run: ./scripts/package-release.sh Linux x86_64
 
       - name: Publish GitHub release assets
