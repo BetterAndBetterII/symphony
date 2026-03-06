@@ -58,6 +58,7 @@ defmodule SymphonyElixir.TestSupport do
           Application.delete_env(:symphony_elixir, :server_port_override)
           Application.delete_env(:symphony_elixir, :memory_tracker_issues)
           Application.delete_env(:symphony_elixir, :memory_tracker_recipient)
+          Application.delete_env(:symphony_elixir, :github_cli_command_runner)
           Enum.each(isolated_env, fn {key, value} -> restore_env(key, value) end)
           File.rm_rf(workflow_root)
         end)

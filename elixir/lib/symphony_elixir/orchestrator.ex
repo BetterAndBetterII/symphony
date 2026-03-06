@@ -190,7 +190,7 @@ defmodule SymphonyElixir.Orchestrator do
         state
 
       {:error, :missing_github_api_token} ->
-        Logger.error("GitHub API token missing in WORKFLOW.md or env")
+        Logger.error(Config.github_auth_error_message(:missing_github_api_token))
         state
 
       {:error, :missing_github_project_owner} ->
@@ -240,7 +240,11 @@ defmodule SymphonyElixir.Orchestrator do
         state
 
       {:error, reason} ->
-        Logger.error("Failed to fetch from tracker: #{inspect(reason)}")
+        case Config.github_auth_error_message(reason) do
+          nil -> Logger.error("Failed to fetch from tracker: #{inspect(reason)}")
+          message -> Logger.error(message)
+        end
+
         state
 
       false ->

@@ -648,14 +648,20 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
   test "config reads defaults for optional settings" do
     previous_github_token = System.get_env("GITHUB_TOKEN")
     previous_gh_token = System.get_env("GH_TOKEN")
+    previous_project_owner = System.get_env("GITHUB_PROJECT_OWNER")
+    previous_project_number = System.get_env("GITHUB_PROJECT_NUMBER")
 
     on_exit(fn ->
       restore_env("GITHUB_TOKEN", previous_github_token)
       restore_env("GH_TOKEN", previous_gh_token)
+      restore_env("GITHUB_PROJECT_OWNER", previous_project_owner)
+      restore_env("GITHUB_PROJECT_NUMBER", previous_project_number)
     end)
 
-    System.delete_env("GITHUB_TOKEN")
-    System.delete_env("GH_TOKEN")
+    System.put_env("GITHUB_TOKEN", "ambient-github-token")
+    System.put_env("GH_TOKEN", "ambient-gh-token")
+    System.put_env("GITHUB_PROJECT_OWNER", "ambient-org")
+    System.put_env("GITHUB_PROJECT_NUMBER", "42")
 
     write_workflow_file!(Workflow.workflow_file_path(),
       workspace_root: nil,
