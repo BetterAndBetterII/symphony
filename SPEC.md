@@ -326,17 +326,17 @@ Top-level keys:
 - `hooks`
 - `agent`
 - `codex`
+- `observability`
+- `server`
 
 Unknown keys should be ignored for forward compatibility.
 
 Note:
 
-- The workflow front matter is extensible. Optional extensions may define additional top-level keys
-  (for example `server`) without changing the core schema above.
+- The workflow front matter is extensible. Additional top-level keys may be introduced in future
+  versions without breaking older readers.
 - Extensions should document their field schema, defaults, validation rules, and whether changes
   apply dynamically or require restart.
-- Common extension: `server.port` (integer) enables the optional HTTP server described in Section
-  13.7.
 
 #### 5.3.1 `tracker` (object)
 
@@ -347,10 +347,12 @@ Fields:
   - Supported values: `github_project`, `memory` (test/dev), `linear` (deprecated)
 - `endpoint` (string)
   - Default for `tracker.kind == "github_project"`: `https://api.github.com/graphql`
+  - Default for `tracker.kind == "linear"`: `https://api.linear.app/graphql`
 - `api_key` (string)
   - Optional explicit auth override.
   - May be a literal token or `$VAR_NAME`.
   - If present, use it after `$VAR_NAME` resolution.
+  - For `tracker.kind == "linear"`, fallback env is `LINEAR_API_KEY`.
   - If absent and `tracker.kind == "github_project"`, resolve the token via
     `gh auth token --hostname <tracker-host>` where `<tracker-host>` is derived from
     `tracker.endpoint` (default: `github.com`).
@@ -361,15 +363,24 @@ Fields:
     `GH_TOKEN` should not be relied upon; headless/CI flows that want env-backed auth should set
     `tracker.api_key: $GITHUB_TOKEN` (or `$GH_TOKEN`) explicitly.
   - If `$VAR_NAME` resolves to an empty string, treat the key as missing.
-- `project_owner` (string)
+- `project_owner` (string or `$VAR_NAME`)
   - Required for dispatch when `tracker.kind == "github_project"`.
-- `project_number` (integer)
+  - No ambient fallback; configure it directly or via an explicit `$VAR_NAME` reference.
+- `project_number` (integer, string integer, or `$VAR_NAME`)
   - Required for dispatch when `tracker.kind == "github_project"`.
+  - No ambient fallback; configure it directly or via an explicit `$VAR_NAME` reference.
 - `project_field_status` (string)
   - Status field name used as the normalized `issue.state` for ProjectV2 items.
   - Default: `Status`.
-- `project_slug` (string, deprecated)
+- `assignee` (string or `$VAR_NAME`, optional)
+  - Optional routing filter for eligible issues.
+  - Fallback envs for GitHub: `GITHUB_ASSIGNEE`, then `TRACKER_ASSIGNEE`.
+  - Fallback envs for Linear: `LINEAR_ASSIGNEE`, then `TRACKER_ASSIGNEE`.
+  - `me` should resolve to the current tracker identity when supported; GitHub implementations may
+    additionally accept comma-separated logins.
+- `project_slug` (string or `$VAR_NAME`, deprecated)
   - Required for dispatch when `tracker.kind == "linear"` (deprecated).
+  - Fallback env when unset: `LINEAR_PROJECT_SLUG`.
 - `active_states` (list of strings or comma-separated string)
   - Default: `Todo`, `In Progress`
 - `terminal_states` (list of strings or comma-separated string)
@@ -387,7 +398,7 @@ Fields:
 
 Fields:
 
-- `root` (path string or `$VAR`)
+- `root` (path string or `$VAR_NAME`)
   - Default: `<system-temp>/symphony_workspaces`
   - `~` and strings containing path separators are expanded.
   - Bare strings without path separators are preserved as-is (relative roots are allowed but
@@ -424,6 +435,10 @@ Fields:
 - `max_concurrent_agents` (integer or string integer)
   - Default: `10`
   - Changes should be re-applied at runtime and affect subsequent dispatch decisions.
+- `max_turns` (positive integer or string integer)
+  - Default: `20`
+  - Caps how many back-to-back Codex turns one agent session may run before control returns to the
+    orchestrator.
 - `max_retry_backoff_ms` (integer or string integer)
   - Default: `300000` (5 minutes)
   - Changes should be re-applied at runtime and affect future retry scheduling.
@@ -449,18 +464,46 @@ fields locally if they want stricter startup checks.
   - The runtime launches this command via `bash -lc` in the workspace directory.
   - The launched process must speak a compatible app-server protocol over stdio.
 - `approval_policy` (Codex `AskForApproval` value)
-  - Default: implementation-defined.
+  - Default: `{"reject":{"sandbox_approval":true,"rules":true,"mcp_elicitations":true}}`
 - `thread_sandbox` (Codex `SandboxMode` value)
-  - Default: implementation-defined.
+  - Default: `workspace-write`
 - `turn_sandbox_policy` (Codex `SandboxPolicy` value)
-  - Default: implementation-defined.
-- `turn_timeout_ms` (integer)
+  - Default: a `workspaceWrite` policy rooted at the current issue workspace, with full read-only
+    access and network disabled.
+- `turn_timeout_ms` (integer or string integer)
   - Default: `3600000` (1 hour)
-- `read_timeout_ms` (integer)
+- `read_timeout_ms` (integer or string integer)
   - Default: `5000`
-- `stall_timeout_ms` (integer)
+- `stall_timeout_ms` (integer or string integer)
   - Default: `300000` (5 minutes)
   - If `<= 0`, stall detection is disabled.
+
+#### 5.3.7 `observability` (object)
+
+Fields:
+
+- `dashboard_enabled` (boolean)
+  - Default: `true`
+  - Controls the terminal/dashboard renderer; it does not itself start the optional HTTP server.
+- `refresh_ms` (integer or string integer)
+  - Default: `1000`
+  - Changes should be re-applied at runtime.
+- `render_interval_ms` (integer or string integer)
+  - Default: `16`
+  - Changes should be re-applied at runtime.
+
+#### 5.3.8 `server` (object)
+
+Fields:
+
+- `port` (non-negative integer or string integer, optional)
+  - Default: disabled (`null`).
+  - Starts the optional HTTP server when present.
+  - `0` requests an ephemeral port.
+  - CLI `--port` overrides this field when both are present.
+- `host` (string)
+  - Default: `127.0.0.1`
+  - Loopback-safe bind host for the optional HTTP server.
 
 ### 5.4 Prompt Template Contract
 
@@ -513,13 +556,21 @@ Configuration precedence:
 3. Environment indirection via `$VAR_NAME` inside selected YAML values.
 4. Built-in defaults.
 
-Value coercion semantics:
+Value resolution semantics:
 
-- Path/command fields support:
+- Only `$VAR_NAME` indirection is supported inside workflow values; legacy `env:VAR_NAME` syntax is
+  invalid.
+- If a selected `$VAR_NAME` resolves to an empty string, treat the value as missing.
+- Path fields support:
   - `~` home expansion
-  - `$VAR` expansion for env-backed path values
+  - `$VAR_NAME` expansion for env-backed path values
   - Apply expansion only to values intended to be local filesystem paths; do not rewrite URIs or
     arbitrary shell command strings.
+- Tracker-specific fallback sources when the workflow field itself is unset:
+  - GitHub auth: `gh auth token --hostname <tracker-host>`
+  - GitHub assignee filter: `GITHUB_ASSIGNEE`, then `TRACKER_ASSIGNEE`
+  - Linear auth/project identity: `LINEAR_API_KEY`, `LINEAR_PROJECT_SLUG`
+  - Linear assignee filter: `LINEAR_ASSIGNEE`, then `TRACKER_ASSIGNEE`
 
 GitHub credential resolution order for `tracker.kind == "github_project"`:
 
@@ -605,13 +656,14 @@ guidance:
 This section is intentionally redundant so a coding agent can implement the config layer quickly.
 
 - `tracker.kind`: string, required, supported: `github_project`, `memory` (test/dev), `linear` (deprecated)
-- `tracker.endpoint`: string, default `https://api.github.com/graphql` when `tracker.kind=github_project`
-- `tracker.api_key`: optional explicit string or `$VAR`; when omitted for
-  `tracker.kind=github_project`, resolve via `gh auth token --hostname <tracker-host>`
-- `tracker.project_owner`: string, required when `tracker.kind=github_project`
-- `tracker.project_number`: integer, required when `tracker.kind=github_project`
+- `tracker.endpoint`: string, defaults to GitHub or Linear GraphQL endpoint based on `tracker.kind`
+- `tracker.api_key`: optional explicit string or `$VAR_NAME`; for GitHub, omit it to resolve via
+  `gh auth token --hostname <tracker-host>`; for Linear, unset falls back to `LINEAR_API_KEY`
+- `tracker.project_owner`: string or `$VAR_NAME`, required when `tracker.kind=github_project`, no ambient fallback
+- `tracker.project_number`: integer/string-or-`$VAR_NAME`, required when `tracker.kind=github_project`, no ambient fallback
 - `tracker.project_field_status`: string, default `Status` when `tracker.kind=github_project`
-- `tracker.project_slug` (deprecated): string, required when `tracker.kind=linear`
+- `tracker.assignee`: optional routing filter; GitHub fallback envs `GITHUB_ASSIGNEE` / `TRACKER_ASSIGNEE`, Linear fallback envs `LINEAR_ASSIGNEE` / `TRACKER_ASSIGNEE`
+- `tracker.project_slug` (deprecated): string or `$VAR_NAME`, required when `tracker.kind=linear`, fallback env `LINEAR_PROJECT_SLUG`
 - `tracker.active_states`: list/string, default `Todo, In Progress`
 - `tracker.terminal_states`: list/string, default `Closed, Cancelled, Canceled, Duplicate, Done`
 - `polling.interval_ms`: integer, default `30000`
@@ -626,14 +678,17 @@ This section is intentionally redundant so a coding agent can implement the conf
 - `agent.max_retry_backoff_ms`: integer, default `300000` (5m)
 - `agent.max_concurrent_agents_by_state`: map of positive integers, default `{}`
 - `codex.command`: shell command string, default `codex app-server`
-- `codex.approval_policy`: Codex `AskForApproval` value, default implementation-defined
-- `codex.thread_sandbox`: Codex `SandboxMode` value, default implementation-defined
-- `codex.turn_sandbox_policy`: Codex `SandboxPolicy` value, default implementation-defined
+- `codex.approval_policy`: Codex `AskForApproval` value, default `{"reject":{"sandbox_approval":true,"rules":true,"mcp_elicitations":true}}`
+- `codex.thread_sandbox`: Codex `SandboxMode` value, default `workspace-write`
+- `codex.turn_sandbox_policy`: Codex `SandboxPolicy` value, default workspace-scoped `workspaceWrite` with network disabled
 - `codex.turn_timeout_ms`: integer, default `3600000`
 - `codex.read_timeout_ms`: integer, default `5000`
 - `codex.stall_timeout_ms`: integer, default `300000`
-- `server.port` (extension): integer, optional; enables the optional HTTP server, `0` may be used
-  for ephemeral local bind, and CLI `--port` overrides it
+- `observability.dashboard_enabled`: boolean, default `true`
+- `observability.refresh_ms`: integer, default `1000`
+- `observability.render_interval_ms`: integer, default `16`
+- `server.port`: integer, optional; enables the optional HTTP server, `0` may be used for ephemeral local bind, and CLI `--port` overrides it
+- `server.host`: string, default `127.0.0.1`
 
 ## 7. Orchestration State Machine
 
@@ -1438,13 +1493,11 @@ Enablement (extension):
 
 - Start the HTTP server when a CLI `--port` argument is provided.
 - Start the HTTP server when `server.port` is present in `WORKFLOW.md` front matter.
-- `server.port` is extension configuration and is intentionally not part of the core front-matter
-  schema in Section 5.3.
+- `server.port` and `server.host` are optional workflow config fields defined in Section 5.3.8.
 - Precedence: CLI `--port` overrides `server.port` when both are present.
-- `server.port` must be an integer. Positive values bind that port. `0` may be used to request an
-  ephemeral port for local development and tests.
-- Implementations should bind loopback by default (`127.0.0.1` or host equivalent) unless explicitly
-  configured otherwise.
+- `server.port` must be a non-negative integer. Positive values bind that port. `0` may be used to
+  request an ephemeral port for local development and tests.
+- Default bind host: `127.0.0.1` unless explicitly configured otherwise.
 - Changes to HTTP listener settings (for example `server.port`) do not need to hot-rebind;
   restart-required behavior is conformant.
 
@@ -1738,7 +1791,7 @@ Recommended additional hardening for ports:
 
 ### 15.3 Secret Handling
 
-- Support `$VAR` indirection in workflow config.
+- Support `$VAR_NAME` indirection in workflow config.
 - When using the `gh` fallback, capture `gh auth token` output in memory only; do not log it or
   persist it to files/comments.
 - When invoking `gh` as the implicit GitHub auth bootstrap, strip inherited `GITHUB_TOKEN` /
@@ -2056,14 +2109,14 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - Front matter non-map returns typed error
 - Config defaults apply when optional values are missing
 - `tracker.kind` validation enforces currently supported kinds (for example `github_project`, `memory`)
-- `tracker.api_key` works (including `$VAR` indirection)
+- `tracker.api_key` works (including `$VAR_NAME` indirection)
 - When `tracker.api_key` is omitted for GitHub, credential resolution shells out to
   `gh auth token --hostname <tracker-host>`
 - GitHub `gh` fallback ignores ambient `GITHUB_TOKEN` / `GH_TOKEN` unless they are referenced
   explicitly via `tracker.api_key`
 - Missing `gh`, missing login, and insufficient-scope cases map to typed errors with actionable
   remediation guidance
-- `$VAR` resolution works for tracker API key and path values
+- `$VAR_NAME` resolution works for tracker API key and path values
 - `~` path expansion works
 - `codex.command` is preserved as a shell command string
 - Per-state concurrency override map normalizes state names and ignores invalid values
