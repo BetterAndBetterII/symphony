@@ -806,35 +806,50 @@ defmodule SymphonyElixir.Config do
   defp parse_integer(_value), do: :error
 
   defp parse_integer_string(value, depth) when is_binary(value) and depth < 5 do
-    if value == "" do
-      :error
-    else
-      case env_reference_name(value) do
-        {:ok, env_name} ->
-          case resolve_env_token(env_name) do
-            :missing ->
-              :error
+    case value do
+      "" ->
+        :error
 
-            env_value when is_binary(env_value) ->
-              env_trimmed = String.trim(env_value)
-
-              cond do
-                env_trimmed == "" -> :error
-                env_trimmed == value -> :error
-                true -> parse_integer_string(env_trimmed, depth + 1)
-              end
-          end
-
-        :error ->
-          case Integer.parse(value) do
-            {parsed, _} -> {:ok, parsed}
-            :error -> :error
-          end
-      end
+      _ ->
+        parse_integer_string_value(value, depth)
     end
   end
 
   defp parse_integer_string(_value, _depth), do: :error
+
+  defp parse_integer_string_value(value, depth) do
+    case env_reference_name(value) do
+      {:ok, env_name} ->
+        parse_integer_string_env_reference(env_name, value, depth)
+
+      :error ->
+        parse_integer_literal(value)
+    end
+  end
+
+  defp parse_integer_string_env_reference(env_name, current_value, depth) do
+    case resolve_env_token(env_name) do
+      :missing ->
+        :error
+
+      env_value when is_binary(env_value) ->
+        parse_resolved_integer_env_value(String.trim(env_value), current_value, depth)
+    end
+  end
+
+  defp parse_resolved_integer_env_value("", _current_value, _depth), do: :error
+  defp parse_resolved_integer_env_value(value, value, _depth), do: :error
+
+  defp parse_resolved_integer_env_value(value, _current_value, depth) do
+    parse_integer_string(value, depth + 1)
+  end
+
+  defp parse_integer_literal(value) do
+    case Integer.parse(value) do
+      {parsed, _} -> {:ok, parsed}
+      :error -> :error
+    end
+  end
 
   defp parse_positive_integer(value) do
     case parse_integer(value) do

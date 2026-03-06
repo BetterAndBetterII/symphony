@@ -893,7 +893,7 @@ defmodule SymphonyElixir.CoreTest do
     assert prompt =~ "标题: Use rich templates for WORKFLOW.md"
     assert prompt =~ "当前状态: In Progress"
     assert prompt =~ "https://example.org/issues/MT-616/use-rich-templates-for-workflowmd"
-    assert prompt =~ "这是一个无人值守的编排会话。"
+    assert prompt =~ "这是一个无人值守的编排会话：不要要求人类执行命令或本地操作。"
     assert prompt =~ "只有在真正阻塞（缺少必需的鉴权/权限/密钥）时才可以提前停止"
     assert prompt =~ "不要包含“用户下一步”"
     assert prompt =~ "打开并遵循 `.codex/skills/land/SKILL.md`"
