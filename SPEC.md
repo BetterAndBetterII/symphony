@@ -2123,6 +2123,48 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - Prompt template renders `issue` and `attempt`
 - Prompt rendering fails on unknown variables (strict mode)
 
+#### Deterministic Config and In-Repo Workflow Fixtures
+
+Behavior and boundaries:
+
+- Negative-path config tests that assert missing GitHub Project identity must actively clear the
+  ambient `GITHUB_PROJECT_OWNER`, `GITHUB_PROJECT_NUMBER`, `GITHUB_ASSIGNEE`, and
+  `TRACKER_ASSIGNEE` variables for the duration of those assertions instead of inheriting the
+  caller environment.
+- Positive-path env fallback coverage should remain explicit: tests that verify `$VAR` or assignee
+  fallback behavior opt in by setting the relevant environment variables locally.
+- The smoke test that renders the checked-in `elixir/WORKFLOW.md` prompt must assert against the
+  current repository-owned prompt contract and change in the same patch as prompt-copy updates.
+
+Failure modes and compatibility:
+
+- A failure in the negative-path config tests should indicate a real regression in config parsing,
+  not leakage from the shell environment that happened to invoke `mix test`.
+- Updating `elixir/WORKFLOW.md` without updating the corresponding smoke-test assertions is a
+  conformance failure.
+- This hardening work does not change runtime behavior or external interfaces; it only makes the
+  conformance suite deterministic across environments.
+
+Implementation route:
+
+1. Reproduce the ambient-env leak by running `core_test.exs` with injected GitHub project and
+   assignee variables.
+2. Isolate the affected negative-path config assertions from ambient assignee/project env while
+   preserving dedicated positive-path fallback coverage.
+3. Re-run the in-repo workflow rendering smoke test against the current checked-in `WORKFLOW.md`
+   and update assertions only if the prompt contract has changed.
+
+Validation for this hardening slice:
+
+- mise exec -- env GITHUB_PROJECT_OWNER=ambient-owner GITHUB_PROJECT_NUMBER=42 GITHUB_ASSIGNEE=ambient-gh TRACKER_ASSIGNEE=ambient-tracker mix test test/symphony_elixir/core_test.exs
+- mise exec -- mix test test/symphony_elixir/core_test.exs:894
+- mise exec -- mix test test/symphony_elixir/core_test.exs test/symphony_elixir/workspace_and_config_test.exs
+
+Migration / release considerations:
+
+- None. No config migration or rollout sequencing is required because production behavior is
+  unchanged.
+
 ### 17.2 Workspace Manager and Safety
 
 - Deterministic workspace path per issue identifier

@@ -4,14 +4,26 @@ defmodule SymphonyElixir.CoreTest do
   test "config defaults and validation checks" do
     previous_github_token = System.get_env("GITHUB_TOKEN")
     previous_gh_token = System.get_env("GH_TOKEN")
+    previous_project_owner = System.get_env("GITHUB_PROJECT_OWNER")
+    previous_project_number = System.get_env("GITHUB_PROJECT_NUMBER")
+    previous_github_assignee = System.get_env("GITHUB_ASSIGNEE")
+    previous_tracker_assignee = System.get_env("TRACKER_ASSIGNEE")
 
     on_exit(fn ->
       restore_env("GITHUB_TOKEN", previous_github_token)
       restore_env("GH_TOKEN", previous_gh_token)
+      restore_env("GITHUB_PROJECT_OWNER", previous_project_owner)
+      restore_env("GITHUB_PROJECT_NUMBER", previous_project_number)
+      restore_env("GITHUB_ASSIGNEE", previous_github_assignee)
+      restore_env("TRACKER_ASSIGNEE", previous_tracker_assignee)
     end)
 
     System.delete_env("GITHUB_TOKEN")
     System.delete_env("GH_TOKEN")
+    System.delete_env("GITHUB_PROJECT_OWNER")
+    System.delete_env("GITHUB_PROJECT_NUMBER")
+    System.delete_env("GITHUB_ASSIGNEE")
+    System.delete_env("TRACKER_ASSIGNEE")
 
     write_workflow_file!(Workflow.workflow_file_path(),
       tracker_kind: "github_project",
@@ -209,14 +221,20 @@ defmodule SymphonyElixir.CoreTest do
   test "github project owner and number ignore ambient env vars when workflow omits them" do
     previous_owner = System.get_env("GITHUB_PROJECT_OWNER")
     previous_number = System.get_env("GITHUB_PROJECT_NUMBER")
+    previous_github_assignee = System.get_env("GITHUB_ASSIGNEE")
+    previous_tracker_assignee = System.get_env("TRACKER_ASSIGNEE")
 
     on_exit(fn ->
       restore_env("GITHUB_PROJECT_OWNER", previous_owner)
       restore_env("GITHUB_PROJECT_NUMBER", previous_number)
+      restore_env("GITHUB_ASSIGNEE", previous_github_assignee)
+      restore_env("TRACKER_ASSIGNEE", previous_tracker_assignee)
     end)
 
     System.put_env("GITHUB_PROJECT_OWNER", "example-org")
     System.put_env("GITHUB_PROJECT_NUMBER", "1")
+    System.put_env("GITHUB_ASSIGNEE", "ambient-gh")
+    System.put_env("TRACKER_ASSIGNEE", "ambient-tracker")
 
     write_workflow_file!(Workflow.workflow_file_path(),
       tracker_kind: "github_project",
