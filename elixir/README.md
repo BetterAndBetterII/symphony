@@ -66,21 +66,41 @@ mise exec -- ./bin/symphony --i-understand-that-this-will-be-running-without-the
 
 ## Configuration
 
+Symphony Elixir reads user-facing configuration from three places:
+
+1. CLI startup arguments for `./bin/symphony`
+2. YAML front matter in `WORKFLOW.md`
+3. Environment variables referenced from `WORKFLOW.md` or used as documented fallbacks
+
+For the full field-by-field reference, see [docs/configuration.md](docs/configuration.md).
+
 Pass a custom workflow file path to `./bin/symphony` when starting the service:
 
 ```bash
-./bin/symphony /path/to/custom/WORKFLOW.md
+./bin/symphony --i-understand-that-this-will-be-running-without-the-usual-guardrails /path/to/custom/WORKFLOW.md
 ```
 
 If no path is passed, Symphony defaults to `./WORKFLOW.md`.
 
 Optional flags:
 
-- `--logs-root` tells Symphony to write logs under a different directory (default: `./log`)
-- `--port` also starts the Phoenix observability service (default: disabled)
+- `--i-understand-that-this-will-be-running-without-the-usual-guardrails` is required; startup
+  fails without it.
+- `--logs-root /path` writes rotating logs to `<logs-root>/log/symphony.log` (default root: the
+  current working directory).
+- `--port <n>` starts the Phoenix observability service and overrides `server.port`. Use `0` to ask
+  the OS for an ephemeral local port.
 
 The `WORKFLOW.md` file uses YAML front matter for configuration, plus a Markdown body used as the
 Codex session prompt.
+
+Most teams only need to change these settings first:
+
+- `tracker.project_owner`, `tracker.project_number`, and `tracker.project_field_status`
+- `workspace.root`
+- `hooks.after_create` (and often `hooks.before_remove`)
+- `agent.max_concurrent_agents` and `agent.max_turns`
+- `codex.command` plus any Codex sandbox / approval settings your environment requires
 
 Minimal example:
 
@@ -108,30 +128,24 @@ You are working on a GitHub issue {{ issue.identifier }}.
 Title: {{ issue.title }} Body: {{ issue.description }}
 ```
 
-Notes:
+Important behavior:
 
-- If a value is missing, defaults are used.
-- Safer Codex defaults are used when policy fields are omitted:
-  - `codex.approval_policy` defaults to `{"reject":{"sandbox_approval":true,"rules":true,"mcp_elicitations":true}}`
-  - `codex.thread_sandbox` defaults to `workspace-write`
-  - `codex.turn_sandbox_policy` defaults to a `workspaceWrite` policy rooted at the current issue workspace
-- Supported `codex.approval_policy` values depend on the targeted Codex app-server version. In the current local Codex schema, string values include `untrusted`, `on-failure`, `on-request`, and `never`, and object-form `reject` is also supported.
-- Supported `codex.thread_sandbox` values: `read-only`, `workspace-write`, `danger-full-access`.
-- Supported `codex.turn_sandbox_policy.type` values: `dangerFullAccess`, `readOnly`,
-  `externalSandbox`, `workspaceWrite`.
-- `agent.max_turns` caps how many back-to-back Codex turns Symphony will run in a single agent
-  invocation when a turn completes normally but the issue is still in an active state. Default: `20`.
-- If the Markdown body is blank, Symphony uses a default prompt template that includes the issue
-  identifier, title, and body.
-- Use `hooks.after_create` to bootstrap a fresh workspace. For a Git-backed repo, you can run
-  `git clone ... .` there, along with any other setup commands you need.
+- If a value is missing, Symphony uses the built-in defaults documented in
+  [docs/configuration.md](docs/configuration.md).
+- The default Codex safety posture is conservative: `approval_policy` rejects interactive approval
+  requests, `thread_sandbox` defaults to `workspace-write`, and `turn_sandbox_policy` defaults to a
+  workspace-scoped `workspaceWrite` policy with network disabled.
+- `agent.max_turns` caps how many back-to-back Codex turns Symphony will run in one agent session
+  before handing control back to the orchestrator. Default: `20`.
+- Use `hooks.after_create` to bootstrap a fresh workspace. For a Git-backed repo, running
+  `git clone ... .` there is the common pattern.
 - If a hook needs `mise exec` inside a freshly cloned workspace, trust the repo config and fetch
   the project dependencies in `hooks.after_create` before invoking `mise` later from other hooks.
-- `tracker.api_key` reads from `GITHUB_TOKEN` (or `GH_TOKEN`) when unset or when value is `$GITHUB_TOKEN`.
-- For path values, `~` is expanded to the home directory.
-- For env-backed path values, use `$VAR`. `workspace.root` resolves `$VAR` before path handling,
-  while `codex.command` stays a shell command string and any `$VAR` expansion there happens in the
-  launched shell.
+- Use `$VAR_NAME` for env-backed values. Legacy `env:VAR_NAME` syntax is not supported.
+- `tracker.api_key` falls back to `GITHUB_TOKEN` or `GH_TOKEN` when unset for GitHub Projects.
+- For path values, `~` is expanded to the home directory. `workspace.root` resolves `$VAR` before
+  path handling, while `codex.command` remains a shell command string and any `$VAR` expansion
+  there happens in the launched shell.
 
 ```yaml
 tracker:
