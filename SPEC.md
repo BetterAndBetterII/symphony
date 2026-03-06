@@ -151,6 +151,8 @@ Fields:
   - Human-readable issue key (example: `owner/repo#123`).
 - `title` (string)
 - `description` (string or null)
+  - Trackers should normalize absent or whitespace-only issue bodies to `null` so downstream code
+    handles a single "missing description" state.
 - `priority` (integer or null)
   - Lower numbers are higher priority in dispatch sorting.
 - `state` (string)
@@ -1362,6 +1364,9 @@ Inputs to prompt rendering:
 - Render with strict filter checking.
 - Convert issue object keys to strings for template compatibility.
 - Preserve nested arrays/maps (labels, blockers) so templates can iterate.
+- Treat missing or blank `issue.description` values as absent input. The default prompt contract
+  should render a stable placeholder line (`No description provided.`) instead of emitting an empty
+  body block.
 
 ### 12.3 Retry/Continuation Semantics
 
@@ -2635,3 +2640,50 @@ Required behavior:
   summary data is present.
 - Rollback is low risk: the change is isolated to the optional observability surface plus its
   snapshot contract.
+
+## 21. Empty-Description Tracker Issues
+
+### 21.1 Expected Behavior
+
+- Tracker issues with a title but no description are valid inputs.
+- A missing, empty, or whitespace-only tracker body must normalize to `Issue.description = null`.
+- The default workflow prompt must still render the standard issue scaffold (`Identifier`, `Title`,
+  `Body`) and replace the missing description with the literal fallback line `No description
+  provided.`
+- Agent runs must not fail solely because a tracker issue omitted the description field.
+
+### 21.2 Affected Boundaries
+
+- `Types`: keep `Issue.description` as `string | null`, with `null` representing both absent and
+  blank tracker bodies.
+- `Repo`: tracker adapters parse raw issue payloads at the integration boundary and collapse blank
+  descriptions to `null`.
+- `Config`: the repository-owned default prompt contract documents the fallback copy for
+  description-less issues.
+- `Service` / `Runtime`: prompt construction consumes the normalized issue model directly instead of
+  scattering repeated blank checks through worker code.
+- `UI` / observability surfaces may omit missing descriptions, but they must tolerate `null`
+  without assuming non-empty text.
+
+### 21.3 Milestones
+
+1. Document the normalization rule for empty tracker descriptions in the core issue model.
+2. Document the default prompt output expected for title-only issues.
+3. Verify targeted tests cover both missing-description prompt rendering and tracker normalization.
+
+### 21.4 Test Plan
+
+- Run `git diff --check` after updating this specification.
+- Run `cd elixir && mix test test/symphony_elixir/core_test.exs` after any implementation or test
+  change that touches prompt fallback behavior.
+- Add or update tracker-adapter tests if any adapter currently preserves whitespace-only
+  descriptions instead of normalizing them to `nil`.
+
+### 21.5 Compatibility, Risks, and Rollback
+
+- Non-empty issue descriptions are unchanged.
+- Blank-to-`null` normalization may change behavior only for trackers that currently preserve
+  whitespace-only bodies; that is acceptable because downstream consumers treat the field as
+  optional content rather than meaningful whitespace.
+- Rollback is low risk because the behavior is isolated to tracker normalization and the default
+  prompt contract.
