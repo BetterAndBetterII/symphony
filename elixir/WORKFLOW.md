@@ -275,6 +275,7 @@ URL: {{ issue.url }}
     - 运行完整的 PR 反馈清扫协议。
     - 确认 PR 检查（checks）在最新改动后全绿通过。
     - 确认工单提供的每一项 validation/test-plan 要求，都在工作台评论中明确标记为已完成。
+    - 如果先前是 Draft PR，完成实施后，修改为 Ready for review。
 11. 用最终检查清单（checklist）状态与验证记录更新工作台评论：
     - 将已完成的 Plan/Acceptance Criteria/Validation 检查清单都勾选掉。
     - 在同一条工作台评论里添加最终交接说明（提交（commit）+ 验证摘要）。

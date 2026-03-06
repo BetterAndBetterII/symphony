@@ -4,6 +4,7 @@ defmodule SymphonyElixirWeb.Presenter do
   """
 
   alias SymphonyElixir.{Config, Orchestrator, StatusDashboard}
+  alias SymphonyElixir.Tracker.StateCount
 
   @spec state_payload(GenServer.name(), timeout()) :: map()
   def state_payload(orchestrator, snapshot_timeout_ms) do
@@ -19,6 +20,7 @@ defmodule SymphonyElixirWeb.Presenter do
           },
           running: Enum.map(snapshot.running, &running_entry_payload/1),
           retrying: Enum.map(snapshot.retrying, &retry_entry_payload/1),
+          tracker: %{states: Enum.map(Map.get(snapshot, :tracker_states, []), &tracker_state_payload/1)},
           codex_totals: snapshot.codex_totals,
           rate_limits: snapshot.rate_limits
         }
@@ -121,6 +123,14 @@ defmodule SymphonyElixirWeb.Presenter do
       due_at: due_at_iso8601(entry.due_in_ms),
       error: entry.error
     }
+  end
+
+  defp tracker_state_payload(%StateCount{name: name, count: count}) do
+    %{name: name, count: count}
+  end
+
+  defp tracker_state_payload(%{name: name, count: count}) when is_binary(name) and is_integer(count) do
+    %{name: name, count: count}
   end
 
   defp running_issue_payload(running) do

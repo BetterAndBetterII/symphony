@@ -25,6 +25,11 @@ defmodule SymphonyElixir.ExtensionsTest do
       {:ok, issue_ids}
     end
 
+    def fetch_state_counts do
+      send(self(), :fetch_state_counts_called)
+      {:ok, []}
+    end
+
     def graphql(query, variables) do
       send(self(), {:graphql_called, query, variables})
 
@@ -192,6 +197,10 @@ defmodule SymphonyElixir.ExtensionsTest do
     assert {:ok, [^issue]} = SymphonyElixir.Tracker.fetch_candidate_issues()
     assert {:ok, [^issue]} = SymphonyElixir.Tracker.fetch_issues_by_states([" in progress ", 42])
     assert {:ok, [^issue]} = SymphonyElixir.Tracker.fetch_issue_states_by_ids(["issue-1"])
+
+    assert {:ok, [%{name: "Todo", count: 0}, %{name: "In Progress", count: 1} | _rest]} =
+             SymphonyElixir.Tracker.fetch_state_counts()
+
     assert :ok = SymphonyElixir.Tracker.create_comment("issue-1", "comment")
     assert :ok = SymphonyElixir.Tracker.update_issue_state("issue-1", "Done")
     assert_receive {:memory_tracker_comment, "issue-1", "comment"}
@@ -205,6 +214,22 @@ defmodule SymphonyElixir.ExtensionsTest do
     assert SymphonyElixir.Tracker.adapter() == Adapter
   end
 
+  test "memory tracker state counts preserve configured order and skip blank states" do
+    Application.put_env(:symphony_elixir, :memory_tracker_issues, [
+      %Issue{id: "issue-1", identifier: "MT-1", state: "In Progress"},
+      %Issue{id: "issue-2", identifier: "MT-2", state: "   "},
+      %Issue{id: "issue-3", identifier: "MT-3", state: "In Progress"}
+    ])
+
+    write_workflow_file!(Workflow.workflow_file_path(), tracker_kind: "memory")
+
+    assert {:ok,
+            [
+              %{name: "Todo", count: 0},
+              %{name: "In Progress", count: 2} | _rest
+            ]} = Memory.fetch_state_counts()
+  end
+
   test "linear adapter delegates reads and validates mutation responses" do
     Application.put_env(:symphony_elixir, :linear_client_module, FakeLinearClient)
 
@@ -216,6 +241,8 @@ defmodule SymphonyElixir.ExtensionsTest do
 
     assert {:ok, ["issue-1"]} = Adapter.fetch_issue_states_by_ids(["issue-1"])
     assert_receive {:fetch_issue_states_by_ids_called, ["issue-1"]}
+
+    assert {:ok, []} = Adapter.fetch_state_counts()
 
     Process.put(
       {FakeLinearClient, :graphql_result},
@@ -354,7 +381,7 @@ defmodule SymphonyElixir.ExtensionsTest do
                  "last_message" => "rendered",
                  "started_at" => state_payload["running"] |> List.first() |> Map.fetch!("started_at"),
                  "last_event_at" => nil,
-                 "tokens" => %{"input_tokens" => 4, "output_tokens" => 8, "total_tokens" => 12}
+                 "tokens" => %{"input_tokens" => 4_000, "output_tokens" => 8_000, "total_tokens" => 12_000}
                }
              ],
              "retrying" => [
@@ -366,10 +393,18 @@ defmodule SymphonyElixir.ExtensionsTest do
                  "error" => "boom"
                }
              ],
+             "tracker" => %{
+               "states" => [
+                 %{"name" => "Todo", "count" => 3},
+                 %{"name" => "In Progress", "count" => 1},
+                 %{"name" => "In Review", "count" => 0},
+                 %{"name" => "Done", "count" => 9}
+               ]
+             },
              "codex_totals" => %{
-               "input_tokens" => 4,
-               "output_tokens" => 8,
-               "total_tokens" => 12,
+               "input_tokens" => 4_000,
+               "output_tokens" => 8_000,
+               "total_tokens" => 12_000,
                "seconds_running" => 42.5
              },
              "rate_limits" => %{"primary" => %{"remaining" => 11}}
@@ -392,7 +427,7 @@ defmodule SymphonyElixir.ExtensionsTest do
                "last_event" => "notification",
                "last_message" => "rendered",
                "last_event_at" => nil,
-               "tokens" => %{"input_tokens" => 4, "output_tokens" => 8, "total_tokens" => 12}
+               "tokens" => %{"input_tokens" => 4_000, "output_tokens" => 8_000, "total_tokens" => 12_000}
              },
              "retry" => nil,
              "logs" => %{"codex_session_logs" => []},
@@ -498,6 +533,10 @@ defmodule SymphonyElixir.ExtensionsTest do
     assert dashboard_css =~ ".status-badge-live"
     assert dashboard_css =~ "[data-phx-main].phx-connected .status-badge-live"
     assert dashboard_css =~ "[data-phx-main].phx-connected .status-badge-offline"
+    assert dashboard_css =~ ".issue-id {"
+    assert dashboard_css =~ "overflow-wrap: anywhere;"
+    assert dashboard_css =~ ".event-text {"
+    assert dashboard_css =~ "white-space: normal;"
 
     phoenix_html_js = response(get(build_conn(), "/vendor/phoenix_html/phoenix_html.js"), 200)
     assert phoenix_html_js =~ "phoenix.link.click"
@@ -535,10 +574,14 @@ defmodule SymphonyElixir.ExtensionsTest do
     assert html =~ "MT-RETRY"
     assert html =~ "rendered"
     assert html =~ "Runtime"
-    assert html =~ "Live"
-    assert html =~ "Offline"
+    assert html =~ "Connected"
+    assert html =~ "Reconnecting"
+    assert html =~ "updated"
+    assert html =~ "last update"
     assert html =~ "Copy ID"
     assert html =~ "Codex update"
+    assert html =~ "12k"
+    assert html =~ "In Review"
     refute html =~ "data-runtime-clock="
     refute html =~ "setInterval(refreshRuntimeClocks"
     refute html =~ "Refresh now"
@@ -688,9 +731,9 @@ defmodule SymphonyElixir.ExtensionsTest do
           last_codex_message: "rendered",
           last_codex_timestamp: nil,
           last_codex_event: :notification,
-          codex_input_tokens: 4,
-          codex_output_tokens: 8,
-          codex_total_tokens: 12,
+          codex_input_tokens: 4_000,
+          codex_output_tokens: 8_000,
+          codex_total_tokens: 12_000,
           started_at: DateTime.utc_now()
         }
       ],
@@ -703,7 +746,13 @@ defmodule SymphonyElixir.ExtensionsTest do
           error: "boom"
         }
       ],
-      codex_totals: %{input_tokens: 4, output_tokens: 8, total_tokens: 12, seconds_running: 42.5},
+      tracker_states: [
+        %{name: "Todo", count: 3},
+        %{name: "In Progress", count: 1},
+        %{name: "In Review", count: 0},
+        %{name: "Done", count: 9}
+      ],
+      codex_totals: %{input_tokens: 4_000, output_tokens: 8_000, total_tokens: 12_000, seconds_running: 42.5},
       rate_limits: %{"primary" => %{"remaining" => 11}}
     }
   end
