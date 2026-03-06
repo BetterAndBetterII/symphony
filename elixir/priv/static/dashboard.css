@@ -188,12 +188,14 @@ pre,
   display: grid;
   justify-items: end;
   align-content: start;
-  min-width: min(100%, 9rem);
+  min-width: min(100%, 18rem);
 }
 
 .status-badge {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 0.45rem;
   min-height: 2rem;
   padding: 0.35rem 0.78rem;
@@ -212,6 +214,14 @@ pre,
   border-radius: 999px;
   background: currentColor;
   opacity: 0.9;
+}
+
+.status-badge-separator {
+  opacity: 0.45;
+}
+
+.status-badge-copy {
+  font-weight: 600;
 }
 
 .status-badge-live {
@@ -267,6 +277,10 @@ pre,
   font-size: 0.88rem;
 }
 
+.metric-card-tracker {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(232, 250, 244, 0.72) 100%);
+}
+
 .section-card {
   border-radius: 24px;
   padding: 1.15rem;
@@ -306,7 +320,7 @@ pre,
 
 .data-table-running {
   table-layout: fixed;
-  min-width: 980px;
+  min-width: 900px;
 }
 
 .data-table th {
@@ -339,16 +353,16 @@ pre,
   font-weight: 500;
   line-height: 1.45;
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .event-meta {
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .state-badge {
@@ -386,6 +400,8 @@ pre,
 .issue-id {
   font-weight: 600;
   letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .issue-link {
@@ -444,8 +460,16 @@ pre,
     justify-items: start;
   }
 
+  .status-badge {
+    justify-content: flex-start;
+  }
+
   .metric-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .data-table-running {
+    min-width: 780px;
   }
 }
 
@@ -459,5 +483,9 @@ pre,
   .error-card {
     border-radius: 20px;
     padding: 1rem;
+  }
+
+  .data-table-running {
+    min-width: 720px;
   }
 }

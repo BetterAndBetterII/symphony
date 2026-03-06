@@ -5,10 +5,12 @@ defmodule SymphonyElixir.Tracker do
 
   alias SymphonyElixir.Config
   alias SymphonyElixir.Tracker.Issue
+  alias SymphonyElixir.Tracker.StateCount
 
   @callback fetch_candidate_issues() :: {:ok, [Issue.t()]} | {:error, term()}
   @callback fetch_issues_by_states([String.t()]) :: {:ok, [Issue.t()]} | {:error, term()}
   @callback fetch_issue_states_by_ids([String.t()]) :: {:ok, [Issue.t()]} | {:error, term()}
+  @callback fetch_state_counts() :: {:ok, [StateCount.t()]} | {:error, term()}
   @callback create_comment(String.t(), String.t()) :: :ok | {:error, term()}
   @callback update_issue_state(String.t(), String.t()) :: :ok | {:error, term()}
 
@@ -25,6 +27,11 @@ defmodule SymphonyElixir.Tracker do
   @spec fetch_issue_states_by_ids([String.t()]) :: {:ok, [Issue.t()]} | {:error, term()}
   def fetch_issue_states_by_ids(issue_ids) do
     adapter().fetch_issue_states_by_ids(issue_ids)
+  end
+
+  @spec fetch_state_counts() :: {:ok, [StateCount.t()]} | {:error, term()}
+  def fetch_state_counts do
+    adapter().fetch_state_counts()
   end
 
   @spec create_comment(String.t(), String.t()) :: :ok | {:error, term()}

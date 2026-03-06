@@ -2,7 +2,7 @@ defmodule SymphonyElixir.GitHub.Project.AdapterTest do
   use SymphonyElixir.TestSupport
 
   alias SymphonyElixir.GitHub.Project.Adapter
-  alias SymphonyElixir.Tracker.Issue
+  alias SymphonyElixir.Tracker.{Issue, StateCount}
 
   defmodule FakeGitHubClient do
     def graphql(query, variables \\ %{}, _opts \\ []) do
@@ -240,5 +240,127 @@ defmodule SymphonyElixir.GitHub.Project.AdapterTest do
 
     assert_received {:graphql_called, query, _vars}
     assert String.contains?(query, "SymphonyGitHubUpdateStatus(")
+  end
+
+  test "fetch_state_counts returns ordered project status counts including zeros" do
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "github_project",
+      tracker_project_owner: "octo-org",
+      tracker_project_number: 1,
+      tracker_project_field_status: "Status"
+    )
+
+    Process.put({FakeGitHubClient, :responder}, fn query, variables ->
+      send(self(), {:graphql_called, query, variables})
+
+      cond do
+        String.contains?(query, "SymphonyGitHubProjectFields(") ->
+          {:ok,
+           %{
+             "data" => %{
+               "repositoryOwner" => %{
+                 "__typename" => "Organization",
+                 "projectV2" => %{
+                   "fields" => %{
+                     "nodes" => [
+                       %{
+                         "__typename" => "ProjectV2SingleSelectField",
+                         "id" => "fld_status",
+                         "name" => "Status",
+                         "options" => [
+                           %{"id" => "opt_todo", "name" => "Todo"},
+                           %{"id" => "opt_in_progress", "name" => "In Progress"},
+                           %{"id" => "opt_done", "name" => "Done"}
+                         ]
+                       }
+                     ]
+                   }
+                 }
+               }
+             }
+           }}
+
+        String.contains?(query, "SymphonyGitHubProjectItemStates(") ->
+          {:ok,
+           %{
+             "data" => %{
+               "repositoryOwner" => %{
+                 "__typename" => "Organization",
+                 "projectV2" => %{
+                   "items" => %{
+                     "nodes" => [
+                       %{
+                         "id" => "item_1",
+                         "fieldValues" => %{
+                           "nodes" => [
+                             %{
+                               "__typename" => "ProjectV2ItemFieldSingleSelectValue",
+                               "name" => "Todo",
+                               "field" => %{
+                                 "__typename" => "ProjectV2SingleSelectField",
+                                 "name" => "Status"
+                               }
+                             }
+                           ]
+                         },
+                         "content" => %{"__typename" => "Issue"}
+                       },
+                       %{
+                         "id" => "item_2",
+                         "fieldValues" => %{
+                           "nodes" => [
+                             %{
+                               "__typename" => "ProjectV2ItemFieldSingleSelectValue",
+                               "name" => "Done",
+                               "field" => %{
+                                 "__typename" => "ProjectV2SingleSelectField",
+                                 "name" => "Status"
+                               }
+                             }
+                           ]
+                         },
+                         "content" => %{"__typename" => "Issue"}
+                       },
+                       %{
+                         "id" => "item_3",
+                         "fieldValues" => %{
+                           "nodes" => [
+                             %{
+                               "__typename" => "ProjectV2ItemFieldSingleSelectValue",
+                               "name" => "Todo",
+                               "field" => %{
+                                 "__typename" => "ProjectV2SingleSelectField",
+                                 "name" => "Status"
+                               }
+                             }
+                           ]
+                         },
+                         "content" => %{"__typename" => "Issue"}
+                       }
+                     ],
+                     "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                   }
+                 }
+               }
+             }
+           }}
+
+        true ->
+          flunk("Unexpected GitHub query: #{inspect(query)}")
+      end
+    end)
+
+    assert {:ok,
+            [
+              %StateCount{name: "Todo", count: 2},
+              %StateCount{name: "In Progress", count: 0},
+              %StateCount{name: "Done", count: 1}
+            ]} = Adapter.fetch_state_counts()
+
+    assert_received {:graphql_called, query, _vars}
+    assert String.contains?(query, "SymphonyGitHubProjectFields(")
+
+    assert_received {:graphql_called, query, _vars}
+    assert String.contains?(query, "SymphonyGitHubProjectItemStates(")
   end
 end
