@@ -2105,6 +2105,9 @@ Use the same validation profiles as Section 17:
   exposes the baseline endpoints/error semantics in Section 13.7 if shipped.
 - Optional `github_graphql` client-side tool extension exposes raw GitHub GraphQL access through the
   app-server session using configured Symphony auth.
+- Recommended distribution profile: ship a self-contained release artifact plus a user-level
+  installer script so that end users can install and run Symphony without language toolchains
+  installed (see Section 19).
 - TODO: Persist retry queue and session metadata across process restarts.
 - TODO: Make observability settings configurable in workflow front matter without prescribing UI
   implementation details.
@@ -2118,3 +2121,115 @@ Use the same validation profiles as Section 17:
 - Verify hook execution and workflow path resolution on the target host OS/shell environment.
 - If the optional HTTP server is shipped, verify the configured port behavior and loopback/default
   bind expectations on the target environment.
+
+## 19. Distribution and Installation Profile (Recommended)
+
+This section defines a recommended "single artifact you can run" distribution profile for Symphony
+implementations.
+
+This profile is intended to:
+
+- Avoid requiring end users to install language toolchains (for example Elixir/Mix).
+- Provide a stable, versioned download surface (GitHub Releases).
+- Provide a one-line installer suitable for automation (`curl | sh`), without requiring root.
+
+### 19.1 Release Artifact Contract
+
+An implementation that ships this profile SHOULD publish a release artifact per supported platform.
+
+Recommended contract:
+
+- Archive format: `.tar.gz`
+- Asset naming: `<app>-v<version>-<os>-<arch>.tar.gz`
+  - Example: `symphony-v0.1.0-linux-amd64.tar.gz`
+- Archive contents: a self-contained runtime directory that can be extracted and executed directly.
+- The extracted payload MUST include everything required to run Symphony on that platform, except:
+  - an issue tracker token (provided via `WORKFLOW.md` or environment variables), and
+  - the coding-agent executable itself (for example `codex`).
+
+### 19.2 Installer Script Contract
+
+An implementation that ships this profile SHOULD provide a user-level installer script that:
+
+- Can be executed via a single command line, for example:
+  - `curl -fsSL <install-script-url> | sh`
+- Installs into user-writable directories (no `sudo`).
+- Installs an executable named `symphony` into a directory intended for user binaries.
+  - Recommended default: `${XDG_BIN_HOME:-$HOME/.local/bin}`
+- Installs the runtime payload into a versioned directory intended for user data.
+  - Recommended default: `${XDG_DATA_HOME:-$HOME/.local/share}/symphony/<version>/`
+- Supports selecting a specific version via an environment variable (for example `SYMPHONY_VERSION`),
+  defaulting to the latest GitHub Release when unset.
+- Detects platform + architecture (`uname -s`, `uname -m`) and selects the correct asset name.
+- Fails with an actionable error message when the platform is unsupported or download/extract fails.
+
+Security and safety recommendations:
+
+- Prefer downloading from `releases/latest/download/<asset>` to avoid JSON parsing dependencies.
+- Optionally publish a `sha256` checksum file per release and verify downloads in the installer when
+  `sha256sum` is available.
+
+### 19.3 Default WORKFLOW.md Bootstrap Contract
+
+To support quick starts, an implementation that ships this profile SHOULD make `symphony` runnable
+from any directory:
+
+- If `./WORKFLOW.md` exists: start Symphony using that workflow.
+- If `./WORKFLOW.md` is missing: create a default `WORKFLOW.md` in the current directory, then
+  start Symphony using that newly created file.
+
+The default `WORKFLOW.md` SHOULD:
+
+- Include valid YAML front matter with a complete baseline configuration.
+- Default to environment-backed tokens (for example `tracker.api_key: $GITHUB_TOKEN`).
+- Use conservative defaults for sandboxing/approvals where applicable.
+- Include clear inline comments or prompt text that indicates where to customize project-specific
+  settings (project owner/number, clone URL, etc).
+
+### 19.4 GitHub Release Automation
+
+For GitHub-hosted repos, the recommended automation is:
+
+- On each push to `main`, read the repo version (for example from a version constant).
+- If the corresponding tag `v<version>` does not exist, create:
+  - a Git tag `v<version>` pointing at that commit, and
+  - a GitHub Release for that tag.
+- Build a release artifact for each supported platform and upload it to that GitHub Release.
+
+Implementation note (Elixir reference implementation):
+
+- Use `mix release` with `include_erts: true` so the target host does not need Elixir/Mix installed.
+
+### 19.5 Milestones and Validation (Suggested)
+
+Suggested implementation milestones for this profile:
+
+1. Build a self-contained release artifact
+   - Add a release definition (for example `mix release`) that bundles the runtime for the target
+     platform.
+   - Produce `.tar.gz` assets using the naming contract in Section 19.1.
+2. Provide a stable installer entrypoint
+   - Add an install script (for example `scripts/install.sh`) that installs the runtime payload into
+     user-writable locations and exposes the `symphony` executable in `${XDG_BIN_HOME:-$HOME/.local/bin}`.
+3. Provide a first-run bootstrap for `WORKFLOW.md`
+   - Ensure `symphony` creates `./WORKFLOW.md` if missing, using a default template that is valid
+     and runnable once required credentials are present.
+4. Automate releases on GitHub Actions
+   - Add workflows that create `v<version>` tags and publish GitHub Releases with the built assets
+     attached.
+5. Update documentation
+   - Document the installer, supported platforms, and required runtime dependencies (token, `git`,
+     `curl`, `tar`, and the coding-agent executable).
+
+Suggested validation for this profile:
+
+- Local validation:
+  - Build the release artifact and start `symphony` in a clean directory that does not contain a
+    `WORKFLOW.md`; verify that it creates the file and starts the service.
+  - Verify that the installed `symphony` works when Elixir/Mix are not present on `$PATH` (for
+    example by running in a minimal container/VM).
+- CI validation:
+  - Ensure the release workflow builds at least one target and uploads an asset to a GitHub Release.
+- Failure-mode validation:
+  - Run the installer on an unsupported `uname -s` / `uname -m` combination and confirm it fails
+    with a clear error message.
