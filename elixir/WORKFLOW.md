@@ -19,7 +19,7 @@ tracker:
 polling:
   interval_ms: 5000
 server:
-  port: 0
+  port: 40013
 workspace:
   root: "$SYMPHONY_WORKSPACE_ROOT"
 hooks:
