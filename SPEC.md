@@ -2128,7 +2128,11 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 
 - CLI accepts an optional positional workflow path argument (`path-to-WORKFLOW.md`)
 - CLI uses `./WORKFLOW.md` when no workflow path argument is provided
-- CLI errors on nonexistent explicit workflow path or missing default `./WORKFLOW.md`
+- CLI errors on nonexistent explicit workflow path
+- When the default `./WORKFLOW.md` is missing, CLI bootstraps it before startup per Section 19.3
+- If guided bootstrap is implemented and stdin/stdout are interactive TTYs, the default-path
+  bootstrap may present a terminal wizard before writing `./WORKFLOW.md`
+- Bootstrap failures do not leave a partially written `WORKFLOW.md`
 - CLI surfaces startup failure cleanly
 - GitHub startup failures surface actionable `gh` remediation when implicit `gh` auth is selected
 - CLI exits with success when application starts and shuts down normally
@@ -2262,8 +2266,13 @@ To support quick starts, an implementation that ships this profile SHOULD make `
 from any directory:
 
 - If `./WORKFLOW.md` exists: start Symphony using that workflow.
-- If `./WORKFLOW.md` is missing: create a default `WORKFLOW.md` in the current directory, then
-  start Symphony using that newly created file.
+- If an explicit workflow path is passed and that file is missing: fail without creating any new
+  file.
+- If `./WORKFLOW.md` is missing and stdin/stdout are not interactive TTYs: create the baseline
+  `WORKFLOW.md` in the current directory, then start Symphony using that newly created file.
+- If `./WORKFLOW.md` is missing and stdin/stdout are interactive TTYs: offer a guided bootstrap
+  flow before startup. That flow must still expose the baseline template path as an operator
+  choice.
 
 The default `WORKFLOW.md` SHOULD:
 
@@ -2272,6 +2281,113 @@ The default `WORKFLOW.md` SHOULD:
 - Use conservative defaults for sandboxing/approvals where applicable.
 - Include clear inline comments or prompt text that indicates where to customize project-specific
   settings (project owner/number, clone URL, etc).
+
+#### 19.3.1 Guided GitHub Project Bootstrap
+
+If the interactive bootstrap path is implemented for GitHub-backed setups, the recommended terminal
+wizard contract is:
+
+1. Present an initial mode picker with these semantic choices:
+   - guided GitHub Project setup
+   - write the baseline non-interactive template
+   - cancel startup without writing a file
+2. Treat all wizard answers as parsed domain values rather than free-form config fragments. A
+   conforming implementation should normalize selection answers into typed values before rendering
+   `WORKFLOW.md` (for example a selected project ref, a chosen approval policy, and a chosen
+   sandbox mode).
+3. Only write `./WORKFLOW.md` after the guided flow reaches a complete, internally consistent
+   result. Failed GitHub reads/writes or abandoned prompts must not leave a partial file behind.
+
+The guided GitHub path SHOULD resolve auth for bootstrap API calls in this order:
+
+1. `GITHUB_TOKEN` when present.
+2. `GH_TOKEN` when present.
+3. `gh auth token --hostname <tracker-host>` after verifying the active account/scopes.
+
+The generated GitHub-backed `WORKFLOW.md` SHOULD include concrete values for:
+
+- `tracker.kind: github_project`
+- `tracker.endpoint: https://api.github.com/graphql` unless a different host was explicitly chosen
+- `tracker.api_key: $GITHUB_TOKEN`
+- `tracker.project_owner`: the selected or newly created project owner login
+- `tracker.project_number`: the selected or newly created ProjectV2 number
+- `tracker.project_field_status`: the status field name reconciled by bootstrap (default `Status`)
+- `tracker.active_states`: `Todo`, `Spec`, `In Progress`, `Rework`, `In Review`, `Merging`
+- `tracker.terminal_states`: `Done`, `Canceled`, `Duplicated`
+- `codex.approval_policy`: the operator-selected approval policy
+- `codex.thread_sandbox`: the operator-selected thread sandbox mode
+
+The remaining baseline fields (workspace root, hooks, prompt body, polling, and server defaults)
+should stay aligned with the non-interactive template so packaged releases keep one shared runtime
+contract.
+
+#### 19.3.2 GitHub Project Discovery and Creation
+
+The guided GitHub bootstrap SHOULD list accessible ProjectV2 boards visible to the authenticated
+viewer across:
+
+- the viewer-owned projects, and
+- organization-owned projects for organizations returned by the viewer membership query.
+
+The selection UI should present enough metadata to distinguish boards at a glance (owner login,
+project title, project number, and URL or equivalent identifier).
+
+If the operator chooses to create a new project, the guided flow SHOULD:
+
+1. Let the operator choose an owner from the owners they can create projects under.
+2. Accept a non-empty project title.
+3. Create a ProjectV2 via GitHub GraphQL.
+4. Ensure the workflow status field contains at least these canonical Symphony options, in this
+   semantic order:
+   - `Backlog`
+   - `Todo`
+   - `Spec`
+   - `In Progress`
+   - `Rework`
+   - `In Review`
+   - `Merging`
+   - `Done`
+   - `Canceled`
+   - `Duplicated`
+
+For an existing selected project, the bootstrap SHOULD reconcile the configured single-select
+status field so the required Symphony options are present without discarding unrelated existing
+options. If no compatible single-select field exists, bootstrap may create one and must write the
+chosen field name back into `tracker.project_field_status`.
+
+Status option colors/descriptions are implementation-defined; correctness is defined by the option
+names and by writing the matching field name into `WORKFLOW.md`.
+
+#### 19.3.3 Codex Defaults Selection
+
+The guided bootstrap SHOULD let the operator choose the Codex defaults written into the generated
+workflow.
+
+Recommended minimum choices:
+
+- `codex.approval_policy`: `untrusted`, `on-failure`, `on-request`, `never`
+- `codex.thread_sandbox`: `read-only`, `workspace-write`, `danger-full-access`
+
+The UI may describe one option in each group as the recommended default, but it should only offer
+values the runtime already understands so the emitted workflow is valid without follow-up edits.
+
+#### 19.3.4 Failure Modes and Guidance
+
+Guided bootstrap failures for GitHub-backed setup SHOULD be typed and operator-actionable:
+
+- Missing auth / missing `gh` / missing scopes: surface one concrete remediation command (for
+  example `gh auth login --hostname github.com --scopes repo,project,read:org` or
+  `gh auth refresh --hostname github.com --scopes repo,project,read:org`).
+- Permission failures (for example project listing or creation forbidden): identify the GitHub
+  operation that failed and explain that the authenticated principal needs ProjectV2 access for the
+  selected owner.
+- GraphQL or transport failures: include the failed operation context and concise API detail.
+- If project creation succeeds but later field reconciliation fails, report the created project
+  identifier so the operator can clean it up manually before retrying.
+
+These failures should stop the guided path without writing `WORKFLOW.md`. They may return the
+operator to the initial mode picker, but they should never silently fall back to a guessed project
+configuration.
 
 ### 19.4 GitHub Release Automation
 
@@ -2301,6 +2417,8 @@ Suggested implementation milestones for this profile:
 3. Provide a first-run bootstrap for `WORKFLOW.md`
    - Ensure `symphony` creates `./WORKFLOW.md` if missing, using a default template that is valid
      and runnable once required credentials are present.
+   - For interactive terminals, offer the guided GitHub Project bootstrap flow defined in Section
+     19.3 while keeping the baseline template path available.
 4. Automate releases on GitHub Actions
    - Add workflows that create `v<version>` tags and publish GitHub Releases with the built assets
      attached.
@@ -2313,10 +2431,17 @@ Suggested validation for this profile:
 - Local validation:
   - Build the release artifact and start `symphony` in a clean directory that does not contain a
     `WORKFLOW.md`; verify that it creates the file and starts the service.
+  - In an interactive terminal with GitHub auth configured, verify the guided bootstrap can both
+    select an existing ProjectV2 and create a new sandbox ProjectV2, then inspect the generated
+    `WORKFLOW.md` for the selected project metadata and Codex defaults.
   - Verify that the installed `symphony` works when Elixir/Mix are not present on `$PATH` (for
     example by running in a minimal container/VM).
 - CI validation:
   - Ensure the release workflow builds at least one target and uploads an asset to a GitHub Release.
 - Failure-mode validation:
+  - Run the guided bootstrap without GitHub auth (and with insufficient scopes, if feasible) and
+    confirm it fails with explicit remediation guidance and does not write `WORKFLOW.md`.
+  - Force a GitHub Project permission or API failure during guided bootstrap and confirm the error
+    identifies the failed operation with actionable context.
   - Run the installer on an unsupported `uname -s` / `uname -m` combination and confirm it fails
     with a clear error message.
