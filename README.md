@@ -10,6 +10,19 @@ _In this [demo video](.github/media/symphony-demo.mp4), Symphony monitors a GitH
 > [!WARNING]
 > Symphony is a low-key engineering preview for testing in trusted environments.
 
+## Quick install
+
+On Linux x86_64, install the latest packaged Symphony release into your user profile with:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/BetterAndBetterII/symphony/main/scripts/install.sh | sh
+```
+
+After installation, run `symphony` from any project directory. It will create `WORKFLOW.md` when
+missing and then boot the service from that directory.
+
+To pin a specific release, export `SYMPHONY_VERSION` before invoking the installer.
+
 ## Running Symphony
 
 ### Requirements
@@ -23,7 +36,7 @@ moving from managing coding agents to managing work that needs to get done.
 Tell your favorite coding agent to build Symphony in a programming language of your choice:
 
 > Implement Symphony according to the following spec:
-> https://github.com/openai/symphony/blob/main/SPEC.md
+> https://github.com/BetterAndBetterII/symphony/blob/main/SPEC.md
 
 ### Option 2. Use our experimental reference implementation
 
@@ -32,7 +45,7 @@ and run the Elixir-based Symphony implementation. You can also ask your favorite
 help with the setup:
 
 > Set up Symphony for my repository based on
-> https://github.com/openai/symphony/blob/main/elixir/README.md
+> https://github.com/BetterAndBetterII/symphony/blob/main/elixir/README.md
 
 ---
 
