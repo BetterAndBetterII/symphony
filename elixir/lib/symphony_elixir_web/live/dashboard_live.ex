@@ -58,11 +58,19 @@ defmodule SymphonyElixirWeb.DashboardLive do
           <div class="status-stack">
             <span class="status-badge status-badge-live">
               <span class="status-badge-dot"></span>
-              Live
+              Connected
+              <span class="status-badge-separator">&middot;</span>
+              <span class="status-badge-copy" title={@payload.generated_at}>
+                <%= snapshot_age_text(@payload.generated_at, @now, :connected) %>
+              </span>
             </span>
             <span class="status-badge status-badge-offline">
               <span class="status-badge-dot"></span>
-              Offline
+              Reconnecting
+              <span class="status-badge-separator">&middot;</span>
+              <span class="status-badge-copy" title={@payload.generated_at}>
+                <%= snapshot_age_text(@payload.generated_at, @now, :offline) %>
+              </span>
             </span>
           </div>
         </div>
@@ -93,9 +101,17 @@ defmodule SymphonyElixirWeb.DashboardLive do
 
           <article class="metric-card">
             <p class="metric-label">Total tokens</p>
-            <p class="metric-value numeric"><%= format_int(@payload.codex_totals.total_tokens) %></p>
+            <p class="metric-value numeric" title={format_int(@payload.codex_totals.total_tokens)}>
+              <%= format_compact_int(@payload.codex_totals.total_tokens) %>
+            </p>
             <p class="metric-detail numeric">
-              In <%= format_int(@payload.codex_totals.input_tokens) %> / Out <%= format_int(@payload.codex_totals.output_tokens) %>
+              <span title={format_int(@payload.codex_totals.input_tokens)}>
+                In <%= format_compact_int(@payload.codex_totals.input_tokens) %>
+              </span>
+              /
+              <span title={format_int(@payload.codex_totals.output_tokens)}>
+                Out <%= format_compact_int(@payload.codex_totals.output_tokens) %>
+              </span>
             </p>
           </article>
 
@@ -104,17 +120,12 @@ defmodule SymphonyElixirWeb.DashboardLive do
             <p class="metric-value numeric"><%= format_runtime_seconds(total_runtime_seconds(@payload, @now)) %></p>
             <p class="metric-detail">Total Codex runtime across completed and active sessions.</p>
           </article>
-        </section>
 
-        <section class="section-card">
-          <div class="section-header">
-            <div>
-              <h2 class="section-title">Rate limits</h2>
-              <p class="section-copy">Latest upstream rate-limit snapshot, when available.</p>
-            </div>
-          </div>
-
-          <pre class="code-panel"><%= pretty_value(@payload.rate_limits) %></pre>
+          <article :for={state_count <- tracker_states(@payload)} class="metric-card metric-card-tracker">
+            <p class="metric-label"><%= state_count.name %></p>
+            <p class="metric-value numeric"><%= format_int(state_count.count) %></p>
+            <p class="metric-detail">GitHub Project items in this status.</p>
+          </article>
         </section>
 
         <section class="section-card">
@@ -195,8 +206,18 @@ defmodule SymphonyElixirWeb.DashboardLive do
                     </td>
                     <td>
                       <div class="token-stack numeric">
-                        <span>Total: <%= format_int(entry.tokens.total_tokens) %></span>
-                        <span class="muted">In <%= format_int(entry.tokens.input_tokens) %> / Out <%= format_int(entry.tokens.output_tokens) %></span>
+                        <span title={format_int(entry.tokens.total_tokens)}>
+                          Total: <%= format_compact_int(entry.tokens.total_tokens) %>
+                        </span>
+                        <span class="muted">
+                          <span title={format_int(entry.tokens.input_tokens)}>
+                            In <%= format_compact_int(entry.tokens.input_tokens) %>
+                          </span>
+                          /
+                          <span title={format_int(entry.tokens.output_tokens)}>
+                            Out <%= format_compact_int(entry.tokens.output_tokens) %>
+                          </span>
+                        </span>
                       </div>
                     </td>
                   </tr>
@@ -243,6 +264,17 @@ defmodule SymphonyElixirWeb.DashboardLive do
               </table>
             </div>
           <% end %>
+        </section>
+
+        <section class="section-card">
+          <div class="section-header">
+            <div>
+              <h2 class="section-title">Rate limits</h2>
+              <p class="section-copy">Latest upstream rate-limit snapshot, when available.</p>
+            </div>
+          </div>
+
+          <pre class="code-panel"><%= pretty_value(@payload.rate_limits) %></pre>
         </section>
       <% end %>
     </section>
@@ -308,6 +340,65 @@ defmodule SymphonyElixirWeb.DashboardLive do
   end
 
   defp format_int(_value), do: "n/a"
+
+  defp format_compact_int(value) when is_integer(value) do
+    abs_value = abs(value)
+
+    cond do
+      abs_value >= 1_000_000_000 -> compact_with_suffix(value, 1_000_000_000, "B")
+      abs_value >= 1_000_000 -> compact_with_suffix(value, 1_000_000, "M")
+      abs_value >= 1_000 -> compact_with_suffix(value, 1_000, "k")
+      true -> format_int(value)
+    end
+  end
+
+  defp format_compact_int(_value), do: "n/a"
+
+  defp compact_with_suffix(value, divisor, suffix) do
+    scaled = value / divisor
+    decimals = if abs(scaled) < 100, do: 1, else: 0
+
+    scaled
+    |> :erlang.float_to_binary(decimals: decimals)
+    |> String.trim_trailing("0")
+    |> String.trim_trailing(".")
+    |> Kernel.<>(suffix)
+  end
+
+  defp tracker_states(%{tracker: %{states: states}}) when is_list(states), do: states
+  defp tracker_states(_payload), do: []
+
+  defp snapshot_age_text(generated_at, now, mode)
+
+  defp snapshot_age_text(generated_at, now, :connected) do
+    "updated #{relative_time_phrase(generated_at, now)}"
+  end
+
+  defp snapshot_age_text(generated_at, now, :offline) do
+    "last update #{relative_time_phrase(generated_at, now)}"
+  end
+
+  defp relative_time_phrase(generated_at, %DateTime{} = now) when is_binary(generated_at) do
+    case DateTime.from_iso8601(generated_at) do
+      {:ok, parsed, _offset} ->
+        parsed
+        |> DateTime.diff(now, :second)
+        |> Kernel.*(-1)
+        |> max(0)
+        |> format_relative_seconds()
+
+      _ ->
+        "n/a"
+    end
+  end
+
+  defp relative_time_phrase(_generated_at, _now), do: "n/a"
+
+  defp format_relative_seconds(seconds) when is_integer(seconds) and seconds < 5, do: "just now"
+  defp format_relative_seconds(seconds) when is_integer(seconds) and seconds < 60, do: "#{seconds}s ago"
+  defp format_relative_seconds(seconds) when is_integer(seconds) and seconds < 3_600, do: "#{div(seconds, 60)}m ago"
+  defp format_relative_seconds(seconds) when is_integer(seconds) and seconds < 86_400, do: "#{div(seconds, 3_600)}h ago"
+  defp format_relative_seconds(seconds) when is_integer(seconds), do: "#{div(seconds, 86_400)}d ago"
 
   defp state_badge_class(state) do
     base = "state-badge"

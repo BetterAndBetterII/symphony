@@ -11,7 +11,7 @@ defmodule SymphonyElixir.GitHub.Project.Adapter do
 
   alias SymphonyElixir.Config
   alias SymphonyElixir.GitHub.Client
-  alias SymphonyElixir.Tracker.Issue
+  alias SymphonyElixir.Tracker.{Issue, StateCount}
 
   @item_page_size 50
   @field_values_first 50
@@ -209,6 +209,80 @@ defmodule SymphonyElixir.GitHub.Project.Adapter do
   }
   """
 
+  @project_item_states_query """
+  query SymphonyGitHubProjectItemStates(
+    $owner: String!
+    $number: Int!
+    $first: Int!
+    $after: String
+    $fieldValuesFirst: Int!
+  ) {
+    repositoryOwner(login: $owner) {
+      __typename
+      ... on Organization {
+        projectV2(number: $number) {
+          items(first: $first, after: $after) {
+            nodes {
+              id
+              fieldValues(first: $fieldValuesFirst) {
+                nodes {
+                  __typename
+                  ... on ProjectV2ItemFieldSingleSelectValue {
+                    name
+                    field {
+                      __typename
+                      ... on ProjectV2SingleSelectField {
+                        name
+                      }
+                    }
+                  }
+                }
+              }
+              content {
+                __typename
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+        }
+      }
+      ... on User {
+        projectV2(number: $number) {
+          items(first: $first, after: $after) {
+            nodes {
+              id
+              fieldValues(first: $fieldValuesFirst) {
+                nodes {
+                  __typename
+                  ... on ProjectV2ItemFieldSingleSelectValue {
+                    name
+                    field {
+                      __typename
+                      ... on ProjectV2SingleSelectField {
+                        name
+                      }
+                    }
+                  }
+                }
+              }
+              content {
+                __typename
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+        }
+      }
+    }
+  }
+  """
+
   @project_fields_query """
   query SymphonyGitHubProjectFields($owner: String!, $number: Int!, $first: Int!) {
     repositoryOwner(login: $owner) {
@@ -336,6 +410,22 @@ defmodule SymphonyElixir.GitHub.Project.Adapter do
   end
 
   @impl true
+  @spec fetch_state_counts() :: {:ok, [StateCount.t()]} | {:error, term()}
+  def fetch_state_counts do
+    with {:ok, %{owner: owner, number: number}} <- project_ref(),
+         {:ok, ordered_state_names} <- fetch_ordered_state_names(owner, number) do
+      do_fetch_project_state_counts_page(
+        owner,
+        number,
+        Config.github_project_status_field(),
+        nil,
+        ordered_state_names,
+        %{}
+      )
+    end
+  end
+
+  @impl true
   @spec create_comment(String.t(), String.t()) :: :ok | {:error, term()}
   def create_comment(issue_id, body) when is_binary(issue_id) and is_binary(body) do
     with {:ok, subject_id} <- resolve_issue_subject_id(issue_id),
@@ -453,6 +543,131 @@ defmodule SymphonyElixir.GitHub.Project.Adapter do
 
   defp next_page_cursor(%{"hasNextPage" => true}), do: {:error, :github_missing_end_cursor}
   defp next_page_cursor(_), do: :done
+
+  defp fetch_ordered_state_names(owner, number) when is_binary(owner) and is_integer(number) do
+    status_field_name = Config.github_project_status_field()
+
+    with {:ok, body} <- client_module().graphql(@project_fields_query, %{owner: owner, number: number, first: 50}),
+         :ok <- ensure_no_graphql_errors(body),
+         %{"fields" => %{"nodes" => fields}} when is_list(fields) <-
+           get_in(body, ["data", "repositoryOwner", "projectV2"]),
+         %{"options" => options} when is_list(options) <- find_single_select_field(fields, status_field_name) do
+      {:ok,
+       Enum.reduce(options, [], fn
+         %{"name" => name}, acc when is_binary(name) ->
+           case String.trim(name) do
+             "" -> acc
+             trimmed_name -> acc ++ [trimmed_name]
+           end
+
+         _, acc ->
+           acc
+       end)}
+    else
+      {:graphql_errors, errors} -> {:error, {:github_graphql_errors, errors}}
+      {:error, reason} -> {:error, reason}
+      nil -> {:error, :github_status_field_not_found}
+      _ -> {:error, :github_unknown_payload}
+    end
+  end
+
+  defp do_fetch_project_state_counts_page(
+         owner,
+         number,
+         status_field_name,
+         after_cursor,
+         ordered_state_names,
+         counts
+       )
+       when is_binary(owner) and is_integer(number) and is_binary(status_field_name) and
+              is_list(ordered_state_names) and is_map(counts) do
+    with {:ok, body} <-
+           client_module().graphql(@project_item_states_query, %{
+             owner: owner,
+             number: number,
+             first: @item_page_size,
+             after: after_cursor,
+             fieldValuesFirst: @field_values_first
+           }),
+         :ok <- ensure_no_graphql_errors(body),
+         %{"nodes" => nodes, "pageInfo" => page_info} when is_list(nodes) and is_map(page_info) <-
+           get_in(body, ["data", "repositoryOwner", "projectV2", "items"]) do
+      updated_counts = Enum.reduce(nodes, counts, &count_project_item_state(&1, status_field_name, &2))
+
+      case next_page_cursor(page_info) do
+        {:ok, next_cursor} ->
+          do_fetch_project_state_counts_page(
+            owner,
+            number,
+            status_field_name,
+            next_cursor,
+            ordered_state_names,
+            updated_counts
+          )
+
+        :done ->
+          {:ok, build_ordered_state_counts(ordered_state_names, updated_counts)}
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    else
+      {:graphql_errors, errors} -> {:error, {:github_graphql_errors, errors}}
+      {:error, reason} -> {:error, reason}
+      _ -> {:error, :github_unknown_payload}
+    end
+  end
+
+  defp count_project_item_state(%{"content" => %{"__typename" => "Issue"}} = item, status_field_name, counts)
+       when is_binary(status_field_name) and is_map(counts) do
+    case resolve_status_value(item, status_field_name) do
+      state_name when is_binary(state_name) ->
+        increment_state_count(counts, state_name)
+
+      _ ->
+        counts
+    end
+  end
+
+  defp count_project_item_state(_item, _status_field_name, counts), do: counts
+
+  defp increment_state_count(counts, state_name) when is_map(counts) and is_binary(state_name) do
+    trimmed_state_name = String.trim(state_name)
+    normalized = normalize_state(trimmed_state_name)
+
+    if normalized == "" do
+      counts
+    else
+      Map.update(counts, normalized, %StateCount{name: trimmed_state_name, count: 1}, fn %StateCount{} = state_count ->
+        %StateCount{state_count | count: state_count.count + 1}
+      end)
+    end
+  end
+
+  defp build_ordered_state_counts(ordered_state_names, counts) when is_list(ordered_state_names) and is_map(counts) do
+    known_states =
+      ordered_state_names
+      |> Enum.map(&normalize_state/1)
+      |> MapSet.new()
+
+    ordered_counts =
+      Enum.map(ordered_state_names, fn state_name ->
+        normalized = normalize_state(state_name)
+
+        case Map.get(counts, normalized) do
+          %StateCount{} = state_count -> state_count
+          _ -> %StateCount{name: state_name, count: 0}
+        end
+      end)
+
+    extra_counts =
+      counts
+      |> Map.values()
+      |> Enum.reject(&MapSet.member?(known_states, normalize_state(&1.name)))
+      |> Enum.sort_by(&normalize_state(&1.name))
+
+    ordered_counts ++ extra_counts
+  end
 
   defp project_ref do
     with {:ok, _auth} <- Config.github_auth(),

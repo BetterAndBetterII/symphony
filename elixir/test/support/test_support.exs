@@ -31,6 +31,15 @@ defmodule SymphonyElixir.TestSupport do
         ]
 
       setup do
+        isolated_env = %{
+          "GITHUB_PROJECT_OWNER" => System.get_env("GITHUB_PROJECT_OWNER"),
+          "GITHUB_PROJECT_NUMBER" => System.get_env("GITHUB_PROJECT_NUMBER"),
+          "LINEAR_API_KEY" => System.get_env("LINEAR_API_KEY"),
+          "LINEAR_PROJECT_SLUG" => System.get_env("LINEAR_PROJECT_SLUG")
+        }
+
+        Enum.each(Map.keys(isolated_env), &System.delete_env/1)
+
         workflow_root =
           Path.join(
             System.tmp_dir!(),
@@ -50,6 +59,7 @@ defmodule SymphonyElixir.TestSupport do
           Application.delete_env(:symphony_elixir, :memory_tracker_issues)
           Application.delete_env(:symphony_elixir, :memory_tracker_recipient)
           Application.delete_env(:symphony_elixir, :github_cli_command_runner)
+          Enum.each(isolated_env, fn {key, value} -> restore_env(key, value) end)
           File.rm_rf(workflow_root)
         end)
 

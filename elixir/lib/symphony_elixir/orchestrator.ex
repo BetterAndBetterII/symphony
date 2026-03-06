@@ -8,7 +8,7 @@ defmodule SymphonyElixir.Orchestrator do
   import Bitwise, only: [<<<: 2]
 
   alias SymphonyElixir.{AgentRunner, Config, StatusDashboard, Tracker, Workspace}
-  alias SymphonyElixir.Tracker.Issue
+  alias SymphonyElixir.Tracker.{Issue, StateCount}
 
   @continuation_retry_delay_ms 1_000
   @failure_retry_base_ms 10_000
@@ -35,6 +35,7 @@ defmodule SymphonyElixir.Orchestrator do
       completed: MapSet.new(),
       claimed: MapSet.new(),
       retry_attempts: %{},
+      tracker_state_counts: [],
       codex_totals: nil,
       codex_rate_limits: nil
     ]
@@ -55,6 +56,7 @@ defmodule SymphonyElixir.Orchestrator do
       max_concurrent_agents: Config.max_concurrent_agents(),
       next_poll_due_at_ms: now_ms,
       poll_check_in_progress: false,
+      tracker_state_counts: [],
       codex_totals: @empty_codex_totals,
       codex_rate_limits: nil
     }
@@ -77,6 +79,7 @@ defmodule SymphonyElixir.Orchestrator do
 
   def handle_info(:run_poll_cycle, state) do
     state = refresh_runtime_config(state)
+    state = refresh_tracker_state_counts(state)
     state = maybe_dispatch(state)
     now_ms = System.monotonic_time(:millisecond)
     next_poll_due_at_ms = now_ms + state.poll_interval_ms
@@ -972,6 +975,7 @@ defmodule SymphonyElixir.Orchestrator do
      %{
        running: running,
        retrying: retrying,
+       tracker_states: Map.get(state, :tracker_state_counts, []),
        codex_totals: state.codex_totals,
        rate_limits: Map.get(state, :codex_rate_limits),
        polling: %{
@@ -998,6 +1002,27 @@ defmodule SymphonyElixir.Orchestrator do
        requested_at: DateTime.utc_now(),
        operations: ["poll", "reconcile"]
      }, state}
+  end
+
+  defp refresh_tracker_state_counts(%State{} = state) do
+    case Tracker.fetch_state_counts() do
+      {:ok, state_counts} when is_list(state_counts) ->
+        %{state | tracker_state_counts: normalize_tracker_state_counts(state_counts)}
+
+      {:error, reason} ->
+        Logger.debug("Failed to refresh tracker state counts: #{inspect(reason)}")
+        state
+    end
+  end
+
+  defp normalize_tracker_state_counts(state_counts) when is_list(state_counts) do
+    Enum.reduce(state_counts, [], fn
+      %StateCount{name: name, count: count}, acc when is_binary(name) and is_integer(count) and count >= 0 ->
+        acc ++ [%StateCount{name: String.trim(name), count: count}]
+
+      _, acc ->
+        acc
+    end)
   end
 
   defp integrate_codex_update(running_entry, %{event: event, timestamp: timestamp} = update) do

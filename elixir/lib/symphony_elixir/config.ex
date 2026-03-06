@@ -831,38 +831,44 @@ defmodule SymphonyElixir.Config do
   defp parse_integer(_value), do: :error
 
   defp parse_integer_string(value, depth) when is_binary(value) and depth < 5 do
-    value
-    |> String.trim()
-    |> parse_integer_token(depth)
+    case String.trim(value) do
+      "" ->
+        :error
+
+      trimmed_value ->
+        case next_integer_value(trimmed_value) do
+          {:env, env_value} -> parse_integer_string(env_value, depth + 1)
+          :not_env -> parse_integer_literal(trimmed_value)
+          :error -> :error
+        end
+    end
   end
 
   defp parse_integer_string(_value, _depth), do: :error
 
-  defp parse_integer_token("", _depth), do: :error
-
-  defp parse_integer_token(value, depth) do
+  defp next_integer_value(value) when is_binary(value) do
     case env_reference_name(value) do
-      {:ok, env_name} -> parse_integer_env_reference(env_name, value, depth)
-      :error -> parse_integer_literal(value)
+      {:ok, env_name} -> resolve_integer_env_value(env_name, value)
+      :error -> :not_env
     end
   end
 
-  defp parse_integer_env_reference(env_name, original_value, depth) do
-    with env_value when is_binary(env_value) <- resolve_env_token(env_name),
-         env_trimmed <- String.trim(env_value),
-         :ok <- validate_integer_env_value(env_trimmed, original_value) do
-      parse_integer_string(env_trimmed, depth + 1)
-    else
-      :missing -> :error
-      :error -> :error
+  defp resolve_integer_env_value(env_name, current_value)
+       when is_binary(env_name) and is_binary(current_value) do
+    case resolve_env_token(env_name) do
+      env_value when is_binary(env_value) ->
+        case String.trim(env_value) do
+          "" -> :error
+          ^current_value -> :error
+          trimmed_value -> {:env, trimmed_value}
+        end
+
+      :missing ->
+        :error
     end
   end
 
-  defp validate_integer_env_value("", _original_value), do: :error
-  defp validate_integer_env_value(value, value), do: :error
-  defp validate_integer_env_value(_value, _original_value), do: :ok
-
-  defp parse_integer_literal(value) do
+  defp parse_integer_literal(value) when is_binary(value) do
     case Integer.parse(value) do
       {parsed, _} -> {:ok, parsed}
       :error -> :error
