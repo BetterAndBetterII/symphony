@@ -1394,6 +1394,18 @@ Enablement (extension):
   retry delays, token consumption, runtime totals, recent events, and health/error indicators).
 - It is up to the implementation whether this is server-generated HTML or a client-side app that
   consumes the JSON API below.
+- If the dashboard renders active-session tables or cards, long tracker identifiers and recent-event
+  text should wrap inside their containers instead of truncating off-screen.
+- If both active-session detail and rate-limit detail are shown, active-session detail should appear
+  before rate-limit detail so the operator's primary focus stays on live work.
+- Human-readable token totals may be compacted with suffixes (for example `k` / `M`) so the layout
+  remains legible, but the JSON API should keep exact integer totals.
+- If the tracker can enumerate workflow states (for example a GitHub Project status field), the
+  dashboard should surface per-state counts in the tracker-defined display order, including zero
+  counts when the tracker exposes the full state list.
+- The dashboard connection indicator should reflect the actual UI transport/session health rather
+  than a static label. It should show both connectivity state (for example connected/disconnected)
+  and the relative age of the most recently rendered snapshot using `generated_at`.
 
 #### 13.7.2 JSON REST API (`/api/v1/*`)
 
@@ -1404,6 +1416,8 @@ Minimum endpoints:
 - `GET /api/v1/state`
   - Returns a summary view of the current system state (running sessions, retry queue/delays,
     aggregate token/runtime totals, latest rate limits, and any additional tracked summary fields).
+  - If the tracker exposes workflow/project states, the response should also include ordered
+    per-state counts for dashboard rendering.
   - Suggested response shape:
 
     ```json
@@ -1445,6 +1459,26 @@ Minimum endpoints:
         "output_tokens": 2400,
         "total_tokens": 7400,
         "seconds_running": 1834.2
+      },
+      "tracker": {
+        "states": [
+          {
+            "name": "Backlog",
+            "count": 8
+          },
+          {
+            "name": "Todo",
+            "count": 3
+          },
+          {
+            "name": "In Progress",
+            "count": 2
+          },
+          {
+            "name": "Done",
+            "count": 15
+          }
+        ]
       },
       "rate_limits": null
     }
@@ -2118,3 +2152,60 @@ Use the same validation profiles as Section 17:
 - Verify hook execution and workflow path resolution on the target host OS/shell environment.
 - If the optional HTTP server is shipped, verify the configured port behavior and loopback/default
   bind expectations on the target environment.
+
+## 19. Issue 14 Dashboard Refresh Plan
+
+### 19.1 Scope
+
+This change refines the optional observability dashboard so it remains readable while the runtime is
+busy and the GitHub Project contains a large amount of work.
+
+Required behavior:
+
+- The `Running sessions` issue column must wrap long issue identifiers/details instead of clipping
+  them on the right edge.
+- The `Rate limits` section must render below `Running sessions`.
+- The hero status indicator must describe real dashboard connectivity and the age of the latest
+  rendered payload instead of always showing `Live`.
+- The `Total tokens` metric and per-session token summaries must use compact human-readable units in
+  the dashboard while preserving exact numeric values in the API.
+- The dashboard must show tracker workflow-state counts alongside the existing runtime counts.
+
+### 19.2 Affected Boundaries
+
+- `Types`: extend the dashboard payload/view model with ordered tracker-state count entries and any
+  derived connection-age fields needed by the template.
+- `Repo`: add a tracker-facing read path that can enumerate workflow-state counts without requiring
+  ad-hoc UI-specific GitHub queries in the LiveView.
+- `Service` / `Runtime`: cache tracker-state counts in orchestrator snapshots so the dashboard can
+  re-render from local state instead of polling GitHub on every UI tick.
+- `UI`: update the LiveView template and CSS so layout order, line wrapping, status copy, and token
+  formatting match the new behavior on desktop and narrow widths.
+
+### 19.3 Milestones
+
+1. Extend the observability snapshot/presenter contract to carry ordered tracker-state counts and
+   the timestamp needed for relative freshness rendering.
+2. Update the dashboard LiveView helpers/template to render compact tokens, connection freshness,
+   reordered sections, and tracker-state summary cards.
+3. Adjust dashboard styling and tests so long issue identifiers/messages wrap cleanly without hiding
+   the rest of the table.
+
+### 19.4 Test Plan
+
+- Run `cd elixir && mix specs.check` after updating this specification.
+- Run `cd elixir && mix test test/symphony_elixir/extensions_test.exs` after implementation to
+  verify the dashboard HTML/API contract.
+- Add or update targeted assertions for tracker-state counts, connection/freshness copy, token
+  compaction, and long-text wrapping behavior.
+
+### 19.5 Compatibility, Risks, and Rollback
+
+- Existing JSON consumers must continue to receive exact token totals; compact formatting is
+  dashboard-only.
+- Tracker-state counts must degrade gracefully when the tracker cannot enumerate states or when the
+  snapshot is unavailable.
+- The dashboard must keep rendering the existing unavailable/error state without assuming tracker
+  summary data is present.
+- Rollback is low risk: the change is isolated to the optional observability surface plus its
+  snapshot contract.
