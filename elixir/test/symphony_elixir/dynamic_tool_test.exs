@@ -298,7 +298,52 @@ defmodule SymphonyElixir.Codex.DynamicToolTest do
 
     assert Jason.decode!(missing_token_text) == %{
              "error" => %{
-               "message" => "Symphony is missing GitHub auth. Set `tracker.api_key` in `WORKFLOW.md` or export `GITHUB_TOKEN` / `GH_TOKEN`."
+               "message" =>
+                 "Symphony is missing GitHub auth. Set `tracker.api_key` in `WORKFLOW.md` (for example `$GITHUB_TOKEN`), or run `gh auth login --hostname github.com --scopes repo,project,read:org`."
+             }
+           }
+
+    not_logged_in =
+      DynamicTool.execute(
+        "github_graphql",
+        %{"query" => "query Viewer { viewer { id } }"},
+        github_client: fn _query, _variables, _opts ->
+          {:error, {:github_cli_not_logged_in, "github.com"}}
+        end
+      )
+
+    assert [
+             %{
+               "text" => not_logged_in_text
+             }
+           ] = not_logged_in["contentItems"]
+
+    assert Jason.decode!(not_logged_in_text) == %{
+             "error" => %{
+               "message" =>
+                 "Symphony could not read GitHub auth from `gh`. Run `gh auth login --hostname github.com --scopes repo,project,read:org`; for headless runs, set `tracker.api_key` in `WORKFLOW.md`."
+             }
+           }
+
+    insufficient_scopes =
+      DynamicTool.execute(
+        "github_graphql",
+        %{"query" => "query Viewer { viewer { id } }"},
+        github_client: fn _query, _variables, _opts ->
+          {:error, {:github_insufficient_scopes, "github.com", ["project"], ["read:org", "repo"]}}
+        end
+      )
+
+    assert [
+             %{
+               "text" => insufficient_scopes_text
+             }
+           ] = insufficient_scopes["contentItems"]
+
+    assert Jason.decode!(insufficient_scopes_text) == %{
+             "error" => %{
+               "message" =>
+                 "Symphony's `gh` session for github.com is missing required GitHub scopes (missing: project; current: read:org, repo). Run `gh auth refresh --hostname github.com --scopes repo,project,read:org`."
              }
            }
 

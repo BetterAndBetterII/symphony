@@ -46,6 +46,10 @@ defmodule SymphonyElixir.CoreTest do
     write_workflow_file!(Workflow.workflow_file_path(), tracker_active_states: "Todo,  Review,")
     assert Config.tracker_active_states() == ["Todo", "Review"]
 
+    Application.put_env(:symphony_elixir, :github_cli_command_runner, fn "gh", _args, _opts ->
+      {:error, :command_not_found}
+    end)
+
     write_workflow_file!(Workflow.workflow_file_path(),
       tracker_kind: "github_project",
       tracker_api_token: nil,
@@ -53,7 +57,7 @@ defmodule SymphonyElixir.CoreTest do
       tracker_project_number: 1
     )
 
-    assert {:error, :missing_github_api_token} = Config.validate!()
+    assert {:error, {:github_cli_not_installed, "github.com"}} = Config.validate!()
 
     write_workflow_file!(Workflow.workflow_file_path(),
       tracker_kind: "github_project",
@@ -176,12 +180,16 @@ defmodule SymphonyElixir.CoreTest do
     assert Config.workflow_prompt() == prompt
   end
 
-  test "github api token resolves from GITHUB_TOKEN env var" do
-    previous_github_api_key = System.get_env("GITHUB_TOKEN")
-    env_api_key = "test-github-api-key"
+  test "github auth resolves from gh auth token when tracker api key is missing" do
+    Application.put_env(:symphony_elixir, :github_cli_command_runner, fn "gh", args, _opts ->
+      case args do
+        ["auth", "status", "--hostname", "github.com", "--json", "hosts"] ->
+          {:ok, ~s({"hosts":{"github.com":[{"state":"success","active":true,"host":"github.com","login":"octo","scopes":"repo, project, read:org"}]}})}
 
-    on_exit(fn -> restore_env("GITHUB_TOKEN", previous_github_api_key) end)
-    System.put_env("GITHUB_TOKEN", env_api_key)
+        ["auth", "token", "--hostname", "github.com"] ->
+          {:ok, "gh-token-123\n"}
+      end
+    end)
 
     write_workflow_file!(Workflow.workflow_file_path(),
       tracker_kind: "github_project",
@@ -191,58 +199,53 @@ defmodule SymphonyElixir.CoreTest do
       codex_command: "/bin/sh app-server"
     )
 
-    assert Config.github_api_token() == env_api_key
+    assert {:ok, %{host: "github.com", source: :gh_cli, token: "gh-token-123"}} = Config.github_auth()
+    assert Config.github_api_token() == "gh-token-123"
     assert Config.github_project_owner() == "example-org"
     assert Config.github_project_number() == 1
     assert :ok = Config.validate!()
   end
 
-  test "github project owner and number resolve from env vars when missing in workflow" do
-    previous_github_api_key = System.get_env("GITHUB_TOKEN")
+  test "github project owner and number ignore ambient env vars when workflow omits them" do
     previous_owner = System.get_env("GITHUB_PROJECT_OWNER")
     previous_number = System.get_env("GITHUB_PROJECT_NUMBER")
 
     on_exit(fn ->
-      restore_env("GITHUB_TOKEN", previous_github_api_key)
       restore_env("GITHUB_PROJECT_OWNER", previous_owner)
       restore_env("GITHUB_PROJECT_NUMBER", previous_number)
     end)
 
-    System.put_env("GITHUB_TOKEN", "test-github-api-key")
     System.put_env("GITHUB_PROJECT_OWNER", "example-org")
     System.put_env("GITHUB_PROJECT_NUMBER", "1")
 
     write_workflow_file!(Workflow.workflow_file_path(),
       tracker_kind: "github_project",
-      tracker_api_token: nil,
+      tracker_api_token: "token",
       tracker_project_owner: nil,
       tracker_project_number: nil,
       codex_command: "/bin/sh app-server"
     )
 
-    assert Config.github_project_owner() == "example-org"
-    assert Config.github_project_number() == 1
-    assert :ok = Config.validate!()
+    assert Config.github_project_owner() == nil
+    assert Config.github_project_number() == nil
+    assert {:error, :missing_github_project_owner} = Config.validate!()
   end
 
   test "github project owner and number resolve from env references in workflow" do
-    previous_github_api_key = System.get_env("GITHUB_TOKEN")
     previous_owner = System.get_env("GITHUB_PROJECT_OWNER")
     previous_number = System.get_env("GITHUB_PROJECT_NUMBER")
 
     on_exit(fn ->
-      restore_env("GITHUB_TOKEN", previous_github_api_key)
       restore_env("GITHUB_PROJECT_OWNER", previous_owner)
       restore_env("GITHUB_PROJECT_NUMBER", previous_number)
     end)
 
-    System.put_env("GITHUB_TOKEN", "test-github-api-key")
     System.put_env("GITHUB_PROJECT_OWNER", "example-org")
     System.put_env("GITHUB_PROJECT_NUMBER", "1")
 
     write_workflow_file!(Workflow.workflow_file_path(),
       tracker_kind: "github_project",
-      tracker_api_token: nil,
+      tracker_api_token: "token",
       tracker_project_owner: "$GITHUB_PROJECT_OWNER",
       tracker_project_number: "$GITHUB_PROJECT_NUMBER",
       codex_command: "/bin/sh app-server"

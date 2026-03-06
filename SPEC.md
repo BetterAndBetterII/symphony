@@ -132,6 +132,8 @@ Symphony is easiest to port when kept in these layers:
 - Optional workspace population tooling (for example Git CLI, if used).
 - Coding-agent executable that supports JSON-RPC-like app-server mode over stdio.
 - Host environment authentication for the issue tracker and coding agent.
+- For `tracker.kind == github_project`, GitHub CLI (`gh`) is the default local bootstrap for
+  issue-tracker auth when `tracker.api_key` is not set explicitly.
 
 ## 4. Core Domain Model
 
@@ -346,8 +348,18 @@ Fields:
 - `endpoint` (string)
   - Default for `tracker.kind == "github_project"`: `https://api.github.com/graphql`
 - `api_key` (string)
+  - Optional explicit auth override.
   - May be a literal token or `$VAR_NAME`.
-  - Canonical environment variable for `tracker.kind == "github_project"`: `GITHUB_TOKEN` (or `GH_TOKEN`).
+  - If present, use it after `$VAR_NAME` resolution.
+  - If absent and `tracker.kind == "github_project"`, resolve the token via
+    `gh auth token --hostname <tracker-host>` where `<tracker-host>` is derived from
+    `tracker.endpoint` (default: `github.com`).
+  - When invoking `gh auth token`, implementations should remove inherited `GITHUB_TOKEN` /
+    `GH_TOKEN` from the child process environment so the implicit fallback uses the active `gh`
+    login rather than ambient shell variables.
+  - Legacy implicit fallback from missing `tracker.api_key` directly to `GITHUB_TOKEN` /
+    `GH_TOKEN` should not be relied upon; headless/CI flows that want env-backed auth should set
+    `tracker.api_key: $GITHUB_TOKEN` (or `$GH_TOKEN`) explicitly.
   - If `$VAR_NAME` resolves to an empty string, treat the key as missing.
 - `project_owner` (string)
   - Required for dispatch when `tracker.kind == "github_project"`.
@@ -509,6 +521,23 @@ Value coercion semantics:
   - Apply expansion only to values intended to be local filesystem paths; do not rewrite URIs or
     arbitrary shell command strings.
 
+GitHub credential resolution order for `tracker.kind == "github_project"`:
+
+1. `tracker.api_key` literal or `$VAR_NAME` after env resolution.
+2. `gh auth token --hostname <tracker-host>` with `GITHUB_TOKEN` / `GH_TOKEN` removed from the
+   subprocess environment.
+3. Typed auth bootstrap error.
+
+Resolution notes:
+
+- `<tracker-host>` is derived from `tracker.endpoint`; for the default GitHub GraphQL endpoint,
+  use `github.com`.
+- The `gh` fallback is the preferred local developer path because it reuses the account already
+  authenticated via GitHub CLI.
+- Explicit env-backed auth remains supported through `tracker.api_key: $GITHUB_TOKEN` (or
+  `$GH_TOKEN`) for headless environments; it is no longer an implicit fallback when
+  `tracker.api_key` is omitted.
+
 ### 6.2 Dynamic Reload Semantics
 
 Dynamic reload is required:
@@ -550,9 +579,26 @@ Validation checks:
 
 - Workflow file can be loaded and parsed.
 - `tracker.kind` is present and supported.
-- `tracker.api_key` is present after `$` resolution.
+- Tracker auth is resolvable:
+  - `tracker.api_key` is present after `$` resolution, or
+  - `gh auth token` returns a non-empty token for the tracker host.
 - Tracker project identity fields are present when required by the selected tracker kind.
 - `codex.command` is present and non-empty.
+
+GitHub auth bootstrap failures should be typed so startup/dispatch surfaces actionable operator
+guidance:
+
+- `github_cli_not_installed`
+  - Tell the operator to install `gh`, or to set `tracker.api_key` explicitly for headless runs.
+- `github_cli_not_logged_in`
+  - Tell the operator to run `gh auth login --hostname <tracker-host> --scopes repo,project,read:org`.
+- `github_insufficient_scopes`
+  - Tell the operator to run `gh auth refresh --hostname <tracker-host> --scopes repo,project,read:org`.
+  - If the target Project owner is an organization or org metadata is queried, include
+    `read:org` in the remediation guidance.
+- `missing_github_api_token`
+  - Reserved for explicit token configuration that resolved to empty/missing and no `gh` fallback
+    is available.
 
 ### 6.4 Config Fields Summary (Cheat Sheet)
 
@@ -560,7 +606,8 @@ This section is intentionally redundant so a coding agent can implement the conf
 
 - `tracker.kind`: string, required, supported: `github_project`, `memory` (test/dev), `linear` (deprecated)
 - `tracker.endpoint`: string, default `https://api.github.com/graphql` when `tracker.kind=github_project`
-- `tracker.api_key`: string or `$VAR`, canonical env `GITHUB_TOKEN` (or `GH_TOKEN`) when `tracker.kind=github_project`
+- `tracker.api_key`: optional explicit string or `$VAR`; when omitted for
+  `tracker.kind=github_project`, resolve via `gh auth token --hostname <tracker-host>`
 - `tracker.project_owner`: string, required when `tracker.kind=github_project`
 - `tracker.project_number`: integer, required when `tracker.kind=github_project`
 - `tracker.project_field_status`: string, default `Status` when `tracker.kind=github_project`
@@ -1171,6 +1218,14 @@ GitHub Projects (ProjectV2)-specific requirements for `tracker.kind == "github_p
 - `tracker.kind == "github_project"`
 - GraphQL endpoint (default `https://api.github.com/graphql`)
 - Auth token sent as `Authorization: Bearer <token>`
+- Token source may come from explicit `tracker.api_key` or the `gh auth token` fallback defined in
+  Section 6.1
+- Full repo/issue/project management requires a token that can:
+  - read/write repository issues (`repo` for classic tokens), and
+  - read/write ProjectV2 fields (`project`; `read:project` alone is insufficient for status
+    mutations)
+- If the Project owner is an organization, retain `read:org` access for project discovery and org
+  metadata queries
 - `tracker.project_owner` and `tracker.project_number` identify the ProjectV2 instance
 - Candidate query paginates through `projectV2.items(...)`
 - Item state is read from the configured single-select field `tracker.project_field_status`
@@ -1204,6 +1259,10 @@ Recommended error categories:
 
 - `unsupported_tracker_kind`
 - `missing_github_api_token`
+- `github_cli_not_installed`
+- `github_cli_not_logged_in`
+- `github_insufficient_scopes`
+- `github_cli_command_failed`
 - `missing_github_project_owner`
 - `missing_github_project_number`
 - `github_api_request` (transport failures)
@@ -1217,6 +1276,8 @@ Orchestrator behavior on tracker errors:
 - Candidate fetch failure: log and skip dispatch for this tick.
 - Running-state refresh failure: log and keep active workers running.
 - Startup terminal cleanup failure: log warning and continue startup.
+- GitHub auth bootstrap failures should include one concrete remediation command and should not ask
+  the operator to create a new PAT when `gh`-based remediation is possible.
 
 ### 11.5 Tracker Writes (Important Boundary)
 
@@ -1644,8 +1705,15 @@ Recommended additional hardening for ports:
 ### 15.3 Secret Handling
 
 - Support `$VAR` indirection in workflow config.
+- When using the `gh` fallback, capture `gh auth token` output in memory only; do not log it or
+  persist it to files/comments.
+- When invoking `gh` as the implicit GitHub auth bootstrap, strip inherited `GITHUB_TOKEN` /
+  `GH_TOKEN` from the child environment unless the workflow explicitly references those vars via
+  `tracker.api_key`.
 - Do not log API tokens or secret env values.
 - Validate presence of secrets without printing them.
+- User-facing diagnostics may name required scopes and suggested `gh auth login` /
+  `gh auth refresh` commands, but must never echo token contents.
 
 ### 15.4 Hook Script Safety
 
@@ -1955,6 +2023,12 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - Config defaults apply when optional values are missing
 - `tracker.kind` validation enforces currently supported kinds (for example `github_project`, `memory`)
 - `tracker.api_key` works (including `$VAR` indirection)
+- When `tracker.api_key` is omitted for GitHub, credential resolution shells out to
+  `gh auth token --hostname <tracker-host>`
+- GitHub `gh` fallback ignores ambient `GITHUB_TOKEN` / `GH_TOKEN` unless they are referenced
+  explicitly via `tracker.api_key`
+- Missing `gh`, missing login, and insufficient-scope cases map to typed errors with actionable
+  remediation guidance
 - `$VAR` resolution works for tracker API key and path values
 - `~` path expansion works
 - `codex.command` is preserved as a shell command string
@@ -1988,6 +2062,8 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - Issue state refresh by ID returns minimal normalized issues
 - Issue state refresh query uses GraphQL `nodes(ids: ...)` with `ID` typing as specified in Section 11.2
 - Error mapping for request errors, non-200, GraphQL errors, malformed payloads
+- GitHub auth failures distinguish explicit token problems from `gh` bootstrap problems
+- Tracker auth tests cover repo + issue reads and ProjectV2 reads/writes with the resolved token
 
 ### 17.4 Orchestrator Dispatch, Reconciliation, and Retry
 
@@ -2054,6 +2130,7 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - CLI uses `./WORKFLOW.md` when no workflow path argument is provided
 - CLI errors on nonexistent explicit workflow path or missing default `./WORKFLOW.md`
 - CLI surfaces startup failure cleanly
+- GitHub startup failures surface actionable `gh` remediation when implicit `gh` auth is selected
 - CLI exits with success when application starts and shuts down normally
 - CLI exits nonzero when startup fails or the host process exits abnormally
 
@@ -2062,8 +2139,18 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 These checks are recommended for production readiness and may be skipped in CI when credentials,
 network access, or external service permissions are unavailable.
 
-- A real tracker smoke test can be run with valid credentials supplied by `GITHUB_TOKEN` / `GH_TOKEN`
-  or a documented local bootstrap mechanism (for example a local credential helper).
+- A real tracker smoke test can be run with valid credentials supplied by explicit
+  `tracker.api_key` configuration or by a documented local bootstrap mechanism such as
+  `gh auth token`.
+- With `tracker.api_key` omitted and ambient `GITHUB_TOKEN` / `GH_TOKEN` unset, the real
+  integration profile should prove that `gh auth token` can execute one GraphQL probe that touches
+  repository, issue, and ProjectV2 resources for the configured tracker host.
+- The real integration profile should include at least one reversible write that proves the token
+  can perform the ProjectV2 mutation path actually used by Symphony (for example updating a
+  sandbox item status and restoring it), and one reversible issue/repo write or an equivalent
+  sandbox mutation that proves repo-level write access.
+- If the target project owner is an organization, the profile should also verify the auth session
+  retains `read:org` visibility.
 - Real integration tests should use isolated test identifiers/workspaces and clean up tracker
   artifacts when practical.
 - A skipped real-integration test should be reported as skipped, not silently treated as passed.
